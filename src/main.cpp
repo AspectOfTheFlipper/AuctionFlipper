@@ -23,56 +23,42 @@
 //using namespace Pistache;
 using namespace cURLpp;
 using namespace std;
-const char fillchar = '=';
 
-// 00000000001111111111222222
-// 01234567890123456789012345
-static const std::string base64_chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789+/";
-
-/** Decompress an STL string using zlib and return the original data. */
-std::string decompress_string(const std::string &str) {
-    z_stream zs;                        // z_stream is zlib's control structure
-    memset(&zs, 0, sizeof(zs));
-
-    if (inflateInit(&zs) != Z_OK)
-        throw (std::runtime_error("inflateInit failed while decompressing."));
-
-    zs.next_in = (Bytef *) str.data();
-    zs.avail_in = str.size();
-
-    int ret;
-    char outbuffer[32768];
-    std::string outstring;
-
-    // get the decompressed bytes blockwise using repeated calls to inflate
-    do {
-        zs.next_out = reinterpret_cast<Bytef *>(outbuffer);
-        zs.avail_out = sizeof(outbuffer);
-
-        ret = inflate(&zs, 0);
-
-        if (outstring.size() < zs.total_out) {
-            outstring.append(outbuffer,
-                             zs.total_out - outstring.size());
-        }
-
-    } while (ret == Z_OK);
-
-    inflateEnd(&zs);
-
-    if (ret != Z_STREAM_END) {          // an error occurred that was not EOF
-        std::ostringstream oss;
-        oss << "Exception during zlib decompression: (" << ret << ") "
-            << zs.msg;
-        throw (std::runtime_error(oss.str()));
+std::string to_roman_numerals(const int &number) {
+    switch (number) {
+        case 1:
+            return "I";
+            break;
+        case 2:
+            return "II";
+            break;
+        case 3:
+            return "III";
+            break;
+        case 4:
+            return "IV";
+            break;
+        case 5:
+            return "V";
+            break;
+        case 6:
+            return "VI";
+            break;
+        case 7:
+            return "VII";
+        case 8:
+            return "VIII";
+            break;
+        case 9:
+            return "IX";
+            break;
+        case 10:
+            return "X";
+            break;
+        default:
+            return "";
     }
-
-    return outstring;
 }
-
 struct Server {
 public:
     //Functions
@@ -86,10 +72,6 @@ public:
         Server.port(port).multithreaded().run();
     }
 
-    void HyAPI() {
-
-    }
-
 
 private:
     //Objects
@@ -101,7 +83,43 @@ private:
     int port = 8080;
 
     //Functions
-    void getPage(int page) {
+    std::string to_roman_numerals(const int &number) {
+        switch (number) {
+            case 1:
+                return "I";
+                break;
+            case 2:
+                return "II";
+                break;
+            case 3:
+                return "III";
+                break;
+            case 4:
+                return "IV";
+                break;
+            case 5:
+                return "V";
+                break;
+            case 6:
+                return "VI";
+                break;
+            case 7:
+                return "VII";
+            case 8:
+                return "VIII";
+                break;
+            case 9:
+                return "IX";
+                break;
+            case 10:
+                return "X";
+                break;
+            default:
+                return "";
+        }
+    }
+
+    int getPage(int page) {
         ++threads;
         ostringstream getStream;
         multimap<string, pair<int, string>> prices;
@@ -119,14 +137,61 @@ private:
                     istringstream str(d);
                     zstr::istream decoded(str);
                     nbtdata.decode(decoded);
-                    cout << nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                            .at<nbt::TagString>("id") << endl;
+                    string ID;
+                    if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
+                        auto enchantments = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                .at<nbt::TagCompound>("enchantments");
+                        ID = enchantments.base.begin()->first + "_" +
+                             to_roman_numerals(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
+                        for (auto &f : ID) f = toupper(f);
+                    } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                       .at<nbt::TagString>("id") == "PET") {
+                        auto petInfo = nlohmann::json::parse(
+                                nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                        .at<nbt::TagString>("petInfo"));
+                        ID = petInfo["tier"].get<string>() + "_" + petInfo["type"].get<string>() + "_PET";
+
+                    } else if (nbt::get_list<nbt::TagCompound>
+                                       (nbtdata.at<nbt::TagList>("i"))[0]
+                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                       .at<nbt::TagString>("id").length() > 8
+                               && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                          .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                          .at<nbt::TagString>("id").substr(nbt::get_list<nbt::TagCompound>
+                                                                                   (nbtdata.at<nbt::TagList>("i"))[0]
+                                                                                   .at<nbt::TagCompound>(
+                                                                                           "tag").at<nbt::TagCompound>(
+                                            "ExtraAttributes")
+                                                                                   .at<nbt::TagString>("id").length() -
+                                                                           8) == "_STARRED") {
+                        ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                .at<nbt::TagString>("id").substr(0, nbt::get_list<nbt::TagCompound>(
+                                        nbtdata.at<nbt::TagList>("i"))[0]
+                                                                            .at<nbt::TagCompound>(
+                                                                                    "tag").at<nbt::TagCompound>(
+                                                "ExtraAttributes")
+                                                                            .at<nbt::TagString>("id").length() - 8);
+                    }
+                    {
+                        ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                .at<nbt::TagString>("id");
+                    }
                 }
             }
         }
         --threads;
-        return;
+        return getJson["totalPages"];
+    }
+
+    void HyAPI() {
+        GlobalPrices.clear();
     }
 
 };
@@ -154,37 +219,51 @@ int main() {
 //            }
 //        }
 //    }
-    ostringstream getStream;
-    multimap<string, pair<int, string>> prices;
-    getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(0));
-    auto getJson = nlohmann::json::parse(getStream.str());
-    int size = getJson["auctions"].size();
-    if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
-        for (int i = 0; i < size; ++i) {
-            if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
-                auto c = cppcodec::base64_rfc4648::decode(
-                        getJson["auctions"][i]["item_bytes"].get<string>());
-                string d(c.begin(), c.end());
-
-                nbt::NBT nbtdata;
-                istringstream str(d);
-                zstr::istream decoded(str);
-                nbtdata.decode(decoded);
-                if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                            .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
-                    cout << nbtdata << endl;
-                } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                   .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                   .at<nbt::TagString>("id") == "PET") {
-                    cout << nbtdata << endl;
-                } else
-                    cout << nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                            .at<nbt::TagString>("id") << endl;
-            }
-        }
-    }
+//    ostringstream getStream;
+//    multimap<string, pair<int, string>> prices;
+//    getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(0));
+//    auto getJson = nlohmann::json::parse(getStream.str());
+//    int size = getJson["auctions"].size();
+//    if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
+//        for (int i = 0; i < size; ++i) {
+//            if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
+//                auto c = cppcodec::base64_rfc4648::decode(
+//                        getJson["auctions"][i]["item_bytes"].get<string>());
+//                string d(c.begin(), c.end());
+//
+//                nbt::NBT nbtdata;
+//                istringstream str(d);
+//                zstr::istream decoded(str);
+//                nbtdata.decode(decoded);
+//                if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+//                                   .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+//                                   .at<nbt::TagString>("id") == "PET") {
+//                    auto petInfo = nlohmann::json::parse(
+//                            nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+//                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+//                            .at<nbt::TagString>("petInfo"));
+//                    string f = petInfo["tier"].get<string>() + "_" + petInfo["type"].get<string>() + "_PET";
+//                    cout<<nbtdata<<endl;
+//
+//                } else if(nbt::get_list<nbt::TagCompound>
+//                (nbtdata.at<nbt::TagList>("i"))[0]
+//                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+//                .at<nbt::TagString>("id").length() > 8
+//                && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+//                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+//                .at<nbt::TagString>("id").substr(nbt::get_list<nbt::TagCompound>
+//                        (nbtdata.at<nbt::TagList>("i"))[0]
+//                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+//                .at<nbt::TagString>("id").length()-8)=="_STARRED")
+//                {
+//                    cout<<"STARRED"<<endl;
+//                }//else
+////                    cout << nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+////                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+////                            .at<nbt::TagString>("id") << endl;
+//            }
+//        }
+//    }
 //    for(int t=0; t<d.size(); ++t)
 //    {
 //        cout<<int(d[t])<<endl;
