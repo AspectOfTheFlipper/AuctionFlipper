@@ -20,45 +20,13 @@
 #include <cppcodec/base64_rfc4648.hpp>
 #include "zstr.hpp"
 #include "nbt.hpp"
+#include <sys/wait.h>
+#include <sys/types.h>
 //using namespace Pistache;
 using namespace cURLpp;
 using namespace std;
 
-std::string to_roman_numerals(const int &number) {
-    switch (number) {
-        case 1:
-            return "I";
-            break;
-        case 2:
-            return "II";
-            break;
-        case 3:
-            return "III";
-            break;
-        case 4:
-            return "IV";
-            break;
-        case 5:
-            return "V";
-            break;
-        case 6:
-            return "VI";
-            break;
-        case 7:
-            return "VII";
-        case 8:
-            return "VIII";
-            break;
-        case 9:
-            return "IX";
-            break;
-        case 10:
-            return "X";
-            break;
-        default:
-            return "";
-    }
-}
+
 struct Server {
 public:
     //Functions
@@ -77,12 +45,40 @@ private:
     //Objects
     crow::SimpleApp Server;
     //Data
-    mutex writing;
+    mutex writing, lock;
     atomic<int> threads = 0;
-    multimap<string, pair<int, string>> GlobalPrices;
+    multimap<string, tuple<int, string, long long>> GlobalPrices;
+    set<string> UniqueIDs;
+    atomic<bool> running;
+    nlohmann::json AveragePrice;
+    nlohmann::json sniper, bin_full, bin_free;
+    int updated = 0;
     int port = 8080;
+    map<string, int> tiers{
+            {"COMMON",    0},
+            {"UNCOMMON",  1},
+            {"RARE",      2},
+            {"EPIC",      3},
+            {"LEGENDARY", 4},
+            {"MYTHIC",    5}
+    };
 
     //Functions
+    static const bool isLevel100(int tier, int xp) {
+        switch (tier) {
+            case 0:
+                return xp >= 5624785;
+            case 1:
+                return xp >= 8644220;
+            case 2:
+                return xp >= 12626665;
+            case 3:
+                return xp >= 17222200;
+            default:
+                return xp >= 25353230;
+        }
+    }
+
     std::string to_roman_numerals(const int &number) {
         switch (number) {
             case 1:
@@ -119,10 +115,27 @@ private:
         }
     }
 
-    int getPage(int page) {
+    const int to_tier(string tier) {
+        return tiers[tier];
+    }
+
+    void get3DayAvg() {
+        while (running) {
+            ostringstream getStream;
+            getStream << options::Url("https://moulberry.codes/auction_averages/3day.json.gz");
+            istringstream str(getStream.str());
+            zstr::istream decoded(str);
+            decoded >> AveragePrice;
+            this_thread::sleep_for(chrono::hours(3));
+        }
+    }
+
+    pair<int, int> getPage(int page) {
         ++threads;
+        cout << "Getting page " << page << '\n';
         ostringstream getStream;
-        multimap<string, pair<int, string>> prices;
+        multimap<string, tuple<int, string, long long>> prices;
+        set<string> localUniqueIDs;
         getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page));
         auto getJson = nlohmann::json::parse(getStream.str());
         int size = getJson["auctions"].size();
@@ -141,11 +154,12 @@ private:
                     if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                 .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                 .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
-                        auto enchantments = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                        auto enchantments = nbt::get_list<nbt::TagCompound>
+                                (nbtdata.at<nbt::TagList>("i"))[0]
                                 .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                 .at<nbt::TagCompound>("enchantments");
-                        ID = enchantments.base.begin()->first + "_" +
-                             to_roman_numerals(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
+                        ID = enchantments.base.begin()->first + ";" +
+                             to_string(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
                         for (auto &f : ID) f = toupper(f);
                     } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
@@ -154,7 +168,10 @@ private:
                                 nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                         .at<nbt::TagString>("petInfo"));
-                        ID = petInfo["tier"].get<string>() + "_" + petInfo["type"].get<string>() + "_PET";
+                        ID = petInfo["type"].get<string>() + ";" + to_string(to_tier
+                                                                                     (petInfo["tier"].get<string>()))
+                             + (isLevel100(to_tier(petInfo["tier"]),
+                                           petInfo["exp"]) ? ";100" : "");
 
                     } else if (nbt::get_list<nbt::TagCompound>
                                        (nbtdata.at<nbt::TagList>("i"))[0]
@@ -183,15 +200,51 @@ private:
                                 .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                 .at<nbt::TagString>("id");
                     }
+                    prices.insert({ID, tuple<int, string, long long>(getJson["auctions"][i]["starting_bid"],
+                                                                     getJson["auctions"][i]["uuid"],
+                                                                     getJson["auctions"][i]["start"])});
+                    localUniqueIDs.insert(ID);
                 }
+
             }
+            writing.lock();
+            UniqueIDs.merge(localUniqueIDs);
+            GlobalPrices.merge(prices);
+            writing.unlock();
         }
         --threads;
-        return getJson["totalPages"];
+        return pair<int, int>(getJson["totalPages"], getJson["lastUpdated"]);
     }
 
     void HyAPI() {
-        GlobalPrices.clear();
+        while (running) {
+            UniqueIDs.clear();
+            GlobalPrices.clear();
+            unique_lock<mutex> APILock(lock);
+            vector<std::thread> children;
+            cout << "Beginning Cycle\n";
+            pair<int, int> information = getPage(0);
+            children.reserve(information.first);
+            if (information.second == updated) {
+                cout << "HyAPI has not updated yet. Sleeping Thread.\n";
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            } else {
+                for (int i = 1; i < information.first; ++i) {
+                    children.emplace_back([this](int i) { getPage(i); }, i);
+                }
+                for (auto &child : children)
+                    child.join();//This sleeps until all fetching threads are done.
+                //Processing
+                for (auto &member : UniqueIDs) {
+                    if (GlobalPrices.find(member)->first == next(GlobalPrices.find(member))->first) //2 or more
+                    {
+                        GlobalPrices.find(member);
+                    } else {
+
+                    }
+                }
+            }
+        }
     }
 
 };
@@ -199,6 +252,11 @@ private:
 int main() {
     //    Pistache::Address addr(Pistache::Ipv4::any(), Pistache::Port(9080));
     initialize(CURL_GLOBAL_ALL);
+    ostringstream getStream;
+    getStream << options::Url("https://moulberry.codes/auction_averages/3day.json.gz");
+    istringstream str(getStream.str());
+    zstr::istream decoded(str);
+    std::string s(std::istreambuf_iterator<char>(decoded), {});
 //    ostringstream getStream;
 //    multimap<string, pair<int, string>> prices;
 //    getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(1));
