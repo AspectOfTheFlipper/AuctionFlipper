@@ -25,35 +25,63 @@
 //using namespace Pistache;
 using namespace cURLpp;
 using namespace std;
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::duration;
+using std::chrono::milliseconds;
 
 
-struct Server {
+class Server {
 public:
     //Functions
     void initialize() {
-        CROW_ROUTE(Server, "/")([] {
+        CROW_ROUTE(CrowServer, "/")([] {
             return "Healthy";
+        });
+        CROW_ROUTE(CrowServer, "/sniper")([this] {
+            return (nlohmann::json::array({{"success",  true},
+                                           {"auctions", sniper}}).dump());
+        });
+        CROW_ROUTE(CrowServer, "/bin_full")([this] {
+            return (nlohmann::json::array({{"success",  true},
+                                           {"auctions", bin_full}}).dump());
+        });
+        CROW_ROUTE(CrowServer, "/bin_free")([this] {
+            return (nlohmann::json::array({{"success",  true},
+                                           {"auctions", bin_free}}).dump());
+        });
+        CROW_ROUTE(CrowServer, "/misc")([this] {
+            return (nlohmann::json::array({{"success",  true},
+                                           {"auctions", unsortable}}).dump());
         });
     }
 
     void start() {
-        Server.port(port).multithreaded().run();
+        running = true;
+        thread AvgApi([this]() { get3DayAvg(); });
+        thread HyApi([this]() { HyAPI(); });
+        CrowServer.port(port).multithreaded().run();
+        HyApi.join();
+        AvgApi.join();
+        //Server.port(port).multithreaded().run();
     }
 
 
 private:
     //Objects
-    crow::SimpleApp Server;
+    crow::SimpleApp CrowServer;
     //Data
     mutex writing, lock;
     atomic<int> threads = 0;
-    multimap<string, tuple<int, string, long long>> GlobalPrices;
+    multimap<string, tuple<int, string, long long, string, string>> GlobalPrices;
     set<string> UniqueIDs;
     atomic<bool> running;
     nlohmann::json AveragePrice;
-    nlohmann::json sniper, bin_full, bin_free;
-    int updated = 0;
+    nlohmann::json sniper, bin_full,
+            bin_free, unsortable;
+    atomic<long long> updated = 0;
     int port = 8080;
+    const int margin = 1000000;
     map<string, int> tiers{
             {"COMMON",    0},
             {"UNCOMMON",  1},
@@ -64,7 +92,7 @@ private:
     };
 
     //Functions
-    static const bool isLevel100(int tier, int xp) {
+    static bool const isLevel100(int tier, int xp) {
         switch (tier) {
             case 0:
                 return xp >= 5624785;
@@ -115,32 +143,34 @@ private:
         }
     }
 
-    const int to_tier(string tier) {
+    int const to_tier(string tier) {
         return tiers[tier];
     }
 
     void get3DayAvg() {
         while (running) {
+            lock.lock();
             ostringstream getStream;
             getStream << options::Url("https://moulberry.codes/auction_averages/3day.json.gz");
             istringstream str(getStream.str());
             zstr::istream decoded(str);
             decoded >> AveragePrice;
+            lock.unlock();
             this_thread::sleep_for(chrono::hours(3));
         }
     }
 
-    pair<int, int> getPage(int page) {
+    pair<int, long long> getPage(int page) {
         ++threads;
-        cout << "Getting page " << page << '\n';
         ostringstream getStream;
-        multimap<string, tuple<int, string, long long>> prices;
+        multimap<string, tuple<int, string, long long, string, string>> prices;
         set<string> localUniqueIDs;
         getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page));
         auto getJson = nlohmann::json::parse(getStream.str());
         int size = getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
             for (int i = 0; i < size; ++i) {
+//                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
                 if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
                     auto c = cppcodec::base64_rfc4648::decode(
                             getJson["auctions"][i]["item_bytes"].get<string>());
@@ -151,7 +181,13 @@ private:
                     zstr::istream decoded(str);
                     nbtdata.decode(decoded);
                     string ID;
-                    if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                    if (nbt::get_list<nbt::TagCompound>
+                                (nbtdata.at<nbt::TagList>("i"))[0]
+                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
+                                .find("enchantments") != nbt::get_list<nbt::TagCompound>
+                                (nbtdata.at<nbt::TagList>("i"))[0]
+                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end() &&
+                        nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                 .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                 .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
                         auto enchantments = nbt::get_list<nbt::TagCompound>
@@ -200,9 +236,12 @@ private:
                                 .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                 .at<nbt::TagString>("id");
                     }
-                    prices.insert({ID, tuple<int, string, long long>(getJson["auctions"][i]["starting_bid"],
-                                                                     getJson["auctions"][i]["uuid"],
-                                                                     getJson["auctions"][i]["start"])});
+                    prices.insert({ID, tuple<int, string, long long, string, string>(
+                            getJson["auctions"][i]["starting_bid"],
+                            getJson["auctions"][i]["uuid"],
+                            getJson["auctions"][i]["start"],
+                            getJson["auctions"][i]["item_name"],
+                            getJson["auctions"][i]["tier"])});
                     localUniqueIDs.insert(ID);
                 }
 
@@ -213,37 +252,162 @@ private:
             writing.unlock();
         }
         --threads;
-        return pair<int, int>(getJson["totalPages"], getJson["lastUpdated"]);
+        return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
     }
 
     void HyAPI() {
         while (running) {
+            lock.lock();
+            auto starttime = high_resolution_clock::now();
             UniqueIDs.clear();
             GlobalPrices.clear();
-            unique_lock<mutex> APILock(lock);
             vector<std::thread> children;
             cout << "Beginning Cycle\n";
-            pair<int, int> information = getPage(0);
+            pair<int, long long> information = getPage(0);
             children.reserve(information.first);
             if (information.second == updated) {
                 cout << "HyAPI has not updated yet. Sleeping Thread.\n";
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                lock.unlock();
+                continue;
             } else {
+                sniper.clear();
+                bin_full.clear();
+                bin_free.clear();
+                unsortable.clear();
+                updated = information.second;
+                long long lastUpdate = information.second - 60000;
                 for (int i = 1; i < information.first; ++i) {
                     children.emplace_back([this](int i) { getPage(i); }, i);
                 }
                 for (auto &child : children)
                     child.join();//This sleeps until all fetching threads are done.
                 //Processing
+                auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
                     if (GlobalPrices.find(member)->first == next(GlobalPrices.find(member))->first) //2 or more
                     {
-                        GlobalPrices.find(member);
+                        if (AveragePrice[member]["price"].is_null()) {
+                            //cout<<"COULD NOT FIND AVERAGE PRICE FOR: "<<member<<"\n";
+                            if (get<0>(GlobalPrices.find(member)->second) <=
+                                get<0>(next(GlobalPrices.find(member))->second) - margin) {
+                                if (get<2>(GlobalPrices.find(member)->second) >= lastUpdate) {
+                                    sniper[sniper.size()] = {
+                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("buy_price",
+                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                            make_pair("sell_price",
+                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                } else {
+                                    bin_full[bin_full.size()] = {
+                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("buy_price",
+                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                            make_pair("sell_price",
+                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                }
+                            } else if (get<0>(GlobalPrices.find(member)->second) <=
+                                       get<0>(next(GlobalPrices.find(member))->second)) {
+                                bin_free[bin_free.size()] = {
+                                        make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                        make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                        make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                        make_pair("sell_price",
+                                                  to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                        make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                            }
+                        } else {
+                            if (get<0>(GlobalPrices.find(member)->second) <=
+                                min(get<0>(next(GlobalPrices.find(member))->second),
+                                    AveragePrice[member]["price"].get<int>()) - margin) {
+                                if (get<2>(GlobalPrices.find(member)->second) >= lastUpdate) {
+                                    sniper[sniper.size()] = {
+                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("buy_price",
+                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                            make_pair("sell_price",
+                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                } else {
+                                    bin_full[bin_full.size()] = {
+                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("buy_price",
+                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                            make_pair("sell_price",
+                                                      to_string(AveragePrice[member]["price"].get<int>() - 1)),
+                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                }
+                            } else if (get<0>(GlobalPrices.find(member)->second) <=
+                                       min(get<0>(next(GlobalPrices.find(member))->second),
+                                           AveragePrice[member]["price"].get<int>())) {
+                                bin_free[bin_free.size()] = {
+                                        make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                        make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                        make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                        make_pair("sell_price",
+                                                  to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                        make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                            }
+                        }
                     } else {
+                        if (AveragePrice[member].is_null()) {
+                            // cout<<"UNABLE TO CLASSIFY: "<<member<<"\n";
+                            unsortable[unsortable.size()] = {
+                                    make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                    make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                    make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                    make_pair("sell_price",
+                                              to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                    make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
 
+                        } else {
+                            if (get<0>(GlobalPrices.find(member)->second) <=
+                                AveragePrice[member]["price"].get<int>() - margin) {
+                                if (get<2>(GlobalPrices.find(member)->second) >= lastUpdate) {
+                                    sniper[sniper.size()] = {
+                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("buy_price",
+                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                            make_pair("sell_price",
+                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                } else {
+                                    bin_full[bin_full.size()] = {
+                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("buy_price",
+                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                            make_pair("sell_price",
+                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                }
+                            } else if (get<0>(GlobalPrices.find(member)->second) <=
+                                       AveragePrice[member]["price"].get<int>()) {
+                                bin_free[bin_free.size()] = {
+                                        make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                        make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                        make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                        make_pair("sell_price",
+                                                  to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                        make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                            }
+                        }
                     }
                 }
+                auto endtime = high_resolution_clock::now();
+                duration<double, std::milli> processingspeed = endtime - downloadtime;
+                cout << processingspeed.count() << endl;
             }
+            lock.unlock();
+            this_thread::sleep_until(
+                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 60000}));
         }
     }
 
@@ -251,173 +415,9 @@ private:
 
 int main() {
     //    Pistache::Address addr(Pistache::Ipv4::any(), Pistache::Port(9080));
-    initialize(CURL_GLOBAL_ALL);
-    ostringstream getStream;
-    getStream << options::Url("https://moulberry.codes/auction_averages/3day.json.gz");
-    istringstream str(getStream.str());
-    zstr::istream decoded(str);
-    std::string s(std::istreambuf_iterator<char>(decoded), {});
-//    ostringstream getStream;
-//    multimap<string, pair<int, string>> prices;
-//    getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(1));
-//    auto getJson = nlohmann::json::parse(getStream.str());
-//    int size = getJson["auctions"].size();
-//    if (getJson["success"]) {
-//        for (int i = 0; i < size; ++i) {
-//            if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
-//                auto c = cppcodec::base64_rfc4648::decode(
-//                        getJson["auctions"][i]["item_bytes"].get<string>());
-//                string d(c.begin(), c.end());
-//
-//                nbt::NBT nbtdata;
-//                istringstream str(d);
-//                zstr::istream decoded(str);
-//                nbtdata.decode(decoded);
-//                cout<<nbtdata<<endl;
-//            }
-//        }
-//    }
-//    ostringstream getStream;
-//    multimap<string, pair<int, string>> prices;
-//    getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(0));
-//    auto getJson = nlohmann::json::parse(getStream.str());
-//    int size = getJson["auctions"].size();
-//    if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
-//        for (int i = 0; i < size; ++i) {
-//            if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
-//                auto c = cppcodec::base64_rfc4648::decode(
-//                        getJson["auctions"][i]["item_bytes"].get<string>());
-//                string d(c.begin(), c.end());
-//
-//                nbt::NBT nbtdata;
-//                istringstream str(d);
-//                zstr::istream decoded(str);
-//                nbtdata.decode(decoded);
-//                if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-//                                   .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-//                                   .at<nbt::TagString>("id") == "PET") {
-//                    auto petInfo = nlohmann::json::parse(
-//                            nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-//                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-//                            .at<nbt::TagString>("petInfo"));
-//                    string f = petInfo["tier"].get<string>() + "_" + petInfo["type"].get<string>() + "_PET";
-//                    cout<<nbtdata<<endl;
-//
-//                } else if(nbt::get_list<nbt::TagCompound>
-//                (nbtdata.at<nbt::TagList>("i"))[0]
-//                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-//                .at<nbt::TagString>("id").length() > 8
-//                && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-//                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-//                .at<nbt::TagString>("id").substr(nbt::get_list<nbt::TagCompound>
-//                        (nbtdata.at<nbt::TagList>("i"))[0]
-//                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-//                .at<nbt::TagString>("id").length()-8)=="_STARRED")
-//                {
-//                    cout<<"STARRED"<<endl;
-//                }//else
-////                    cout << nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-////                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-////                            .at<nbt::TagString>("id") << endl;
-//            }
-//        }
-//    }
-//    for(int t=0; t<d.size(); ++t)
-//    {
-//        cout<<int(d[t])<<endl;
-//    }
-//     NBT::NBTReader::LoadFromData((unsigned char *)(void*)(d.c_str()), d.size());
-//    enkiNBTDataStream stream;
-//    enkiNBTInitFromMemoryCompressed(&stream, (uint8_t *) d.c_str(), d.size(), 0);
-//    ostringstream getStream;
-//    getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(0));
-//    auto getJson = nlohmann::json::parse(getStream.str());
-//    int size = getJson["auctions"].size();
-//    if (getJson["success"]) {
-//        for (int i = 0; i < size; ++i) {
-//
-//        }
-//    }
-//    Server HyAuctions;
-//    HyAuctions.initialize();
-//    HyAuctions.start();
-    //    HttpHandler handler(addr);
-    //    handler.init(4);
-    //    handler.start();
+    Server entrypoint;
+    entrypoint.initialize();
+    entrypoint.start();
     cURLpp::terminate();
     return 0;
 }
-// LEGACY CODEBASE
-//class HttpHandler
-//        {
-//        public:
-//            explicit HttpHandler(Address addr)
-//            : httpEndpoint(std::make_shared<Http::Endpoint>(addr))
-//            {}
-//
-//            void init(size_t thr = 2)
-//            {
-//                auto opts = Http::Endpoint::options()
-//                        .threads(static_cast<int>(thr));
-//                httpEndpoint->init(opts);
-//                setupRoutes();
-//            }
-//
-//            void start()
-//            {
-//                running=true;
-//                auto HyClientThread = std::make_unique<std::thread>([this] { HypixelFetch(); });
-//                httpEndpoint->setHandler(router.handler());
-//                httpEndpoint->serve();
-//            }
-//        private:
-//            std::shared_ptr<Http::Endpoint> httpEndpoint;
-//            Rest::Router router;
-////            Http::Experimental::Client hypixel;
-//            const string AuctionEndpoint = "https://api.hypixel.net/skyblock/auctions";
-//            atomic<bool> running = false;
-//            std::string sniper, bin_full, bin_free;
-//            cURLpp::Easy HyHandle;
-//
-//
-//            void setupRoutes()
-//            {
-//                using namespace Rest;
-//
-//                Routes::Get(router, "/ready", Routes::bind(&HttpHandler::isUp, this));
-//
-//            }
-//            void isUp(const Rest::Request&, Http::ResponseWriter response)
-//            {
-//                response.send(Http::Code::Ok, "1");
-//            }
-//            void HypixelFetch()
-//            {
-//
-//                HyHandle.setOpt(cURLpp::Options::Url(AuctionEndpoint+"?page=0"));
-//                HyHandle.perform();
-//
-////                auto HyOpts = Http::Experimental::Client::options().threads(1).maxConnectionsPerHost(8);
-////                hypixel.init(HyOpts);
-////                int timestamp=0;
-////                while(running){
-////                    int pages=0;
-////                    std::vector<Async::Promise<Http::Response>> responses;
-////                    auto response = hypixel.get(AuctionEndpoint).send();
-////                    response.then(
-////                            [&](Http::Response response1)
-////                            {
-////                                cout<<response1.code()<<endl<<response1.body()<<endl;
-////                                },
-////                                [&](std::exception_ptr exc) {
-////                                PrintException excPrinter;
-////                                excPrinter(exc);
-////                            }
-////                            );
-////                    break;
-////                }
-////                return;
-//            }
-//        };
-
-
