@@ -11,6 +11,7 @@
 //#include <pistache/http_headers.h>
 //#include <pistache/peer.h>
 //#include <pistache/router.h>
+#define cURL::CURLOPT_TCP_NO_DELAY
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
@@ -39,20 +40,28 @@ public:
             return "Healthy";
         });
         CROW_ROUTE(CrowServer, "/sniper")([this] {
-            return (nlohmann::json::array({{"success",  true},
-                                           {"auctions", sniper}}).dump());
+            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                        {"auctions", sniper}}).dump());
+            response.add_header("Content-Type", "application/json");
+            return response;
         });
         CROW_ROUTE(CrowServer, "/bin_full")([this] {
-            return (nlohmann::json::array({{"success",  true},
-                                           {"auctions", bin_full}}).dump());
+            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                        {"auctions", bin_full}}).dump());
+            response.add_header("Content-Type", "application/json");
+            return response;
         });
         CROW_ROUTE(CrowServer, "/bin_free")([this] {
-            return (nlohmann::json::array({{"success",  true},
-                                           {"auctions", bin_free}}).dump());
+            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                        {"auctions", bin_free}}).dump());
+            response.add_header("Content-Type", "application/json");
+            return response;
         });
         CROW_ROUTE(CrowServer, "/misc")([this] {
-            return (nlohmann::json::array({{"success",  true},
-                                           {"auctions", unsortable}}).dump());
+            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                        {"auctions", unsortable}}).dump());
+            response.add_header("Content-Type", "application/json");
+            return response;
         });
     }
 
@@ -61,8 +70,14 @@ public:
         thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         CrowServer.port(port).multithreaded().run();
-        HyApi.join();
+        std::lock_guard<std::mutex> clock(exit);
+        running = false;
+        exitc.notify_all();
         AvgApi.join();
+        cout << "AvgAPI exited." << endl;
+        HyApi.join();
+        cout << "HyAPI exited." << endl;
+
         //Server.port(port).multithreaded().run();
     }
 
@@ -71,7 +86,8 @@ private:
     //Objects
     crow::SimpleApp CrowServer;
     //Data
-    mutex writing, lock;
+    mutex writing, lock, exit;
+    condition_variable exitc;
     atomic<int> threads = 0;
     multimap<string, tuple<int, string, long long, string, string>> GlobalPrices;
     set<string> UniqueIDs;
@@ -80,6 +96,7 @@ private:
     nlohmann::json sniper, bin_full,
             bin_free, unsortable;
     atomic<long long> updated = 0;
+    map<string, string> Auth;
     int port = 8080;
     const int margin = 1000000;
     map<string, int> tiers{
@@ -156,16 +173,25 @@ private:
             zstr::istream decoded(str);
             decoded >> AveragePrice;
             lock.unlock();
-            this_thread::sleep_for(chrono::hours(3));
+            for (int i = 0; i < 720; ++i) {
+                if (!running) break; else this_thread::sleep_for(chrono::seconds(15));
+            }
         }
     }
 
     pair<int, long long> getPage(int page) {
         ++threads;
+        auto starttime = high_resolution_clock::now();
         ostringstream getStream;
         multimap<string, tuple<int, string, long long, string, string>> prices;
         set<string> localUniqueIDs;
-        getStream << options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page));
+        curlpp::Easy get;
+        curlpp::Cleanup cleaner;
+        get.setOpt(curlpp::options::WriteStream(&getStream));
+        get.setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
+        get.setOpt(options::TcpNoDelay(true));
+        get.perform();
+        auto downloadtime = high_resolution_clock::now();
         auto getJson = nlohmann::json::parse(getStream.str());
         int size = getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
@@ -250,9 +276,17 @@ private:
             UniqueIDs.merge(localUniqueIDs);
             GlobalPrices.merge(prices);
             writing.unlock();
+            auto endtime = high_resolution_clock::now();
+            duration<double, std::milli> totalspeed = endtime - starttime;
+            duration<double, std::milli> downloadspeed = downloadtime - starttime;
+            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
         }
         --threads;
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
+    }
+
+    bool authenticated(string UUID, string key, string IP) {
+
     }
 
     void HyAPI() {
@@ -296,18 +330,18 @@ private:
                                             make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                             make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
                                             make_pair("buy_price",
-                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                                      get<0>(GlobalPrices.find(member)->second)),
                                             make_pair("sell_price",
-                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
                                             make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                                 } else {
                                     bin_full[bin_full.size()] = {
                                             make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                             make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
                                             make_pair("buy_price",
-                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                                      get<0>(GlobalPrices.find(member)->second)),
                                             make_pair("sell_price",
-                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
                                             make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                                 }
                             } else if (get<0>(GlobalPrices.find(member)->second) <=
@@ -315,9 +349,9 @@ private:
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                         make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                        make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                        make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
                                         make_pair("sell_price",
-                                                  to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                  get<0>(next(GlobalPrices.find(member))->second) - 1),
                                         make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                             }
                         } else {
@@ -329,18 +363,18 @@ private:
                                             make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                             make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
                                             make_pair("buy_price",
-                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                                      get<0>(GlobalPrices.find(member)->second)),
                                             make_pair("sell_price",
-                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
                                             make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                                 } else {
                                     bin_full[bin_full.size()] = {
                                             make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                             make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
                                             make_pair("buy_price",
-                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                                      get<0>(GlobalPrices.find(member)->second)),
                                             make_pair("sell_price",
-                                                      to_string(AveragePrice[member]["price"].get<int>() - 1)),
+                                                      AveragePrice[member]["price"].get<int>() - 1),
                                             make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                                 }
                             } else if (get<0>(GlobalPrices.find(member)->second) <=
@@ -349,9 +383,9 @@ private:
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                         make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                        make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                        make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
                                         make_pair("sell_price",
-                                                  to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                  get<0>(next(GlobalPrices.find(member))->second) - 1),
                                         make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                             }
                         }
@@ -361,9 +395,7 @@ private:
                             unsortable[unsortable.size()] = {
                                     make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                     make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                    make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
-                                    make_pair("sell_price",
-                                              to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                    make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
                                     make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
 
                         } else {
@@ -374,36 +406,39 @@ private:
                                             make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                             make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
                                             make_pair("buy_price",
-                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                                      get<0>(GlobalPrices.find(member)->second)),
                                             make_pair("sell_price",
-                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
                                             make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                                 } else {
                                     bin_full[bin_full.size()] = {
                                             make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
                                             make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
                                             make_pair("buy_price",
-                                                      to_string(get<0>(GlobalPrices.find(member)->second))),
+                                                      get<0>(GlobalPrices.find(member)->second)),
                                             make_pair("sell_price",
-                                                      to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
                                             make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                                 }
                             } else if (get<0>(GlobalPrices.find(member)->second) <=
                                        AveragePrice[member]["price"].get<int>()) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                        make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                        make_pair("buy_price", to_string(get<0>(GlobalPrices.find(member)->second))),
+                                        make_pair("item_name",
+                                                  (get<3>(GlobalPrices.find(member)->second))),
+                                        make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
                                         make_pair("sell_price",
-                                                  to_string(get<0>(next(GlobalPrices.find(member))->second) - 1)),
+                                                  get<0>(next(GlobalPrices.find(member))->second) - 1),
                                         make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
                             }
                         }
                     }
                 }
                 auto endtime = high_resolution_clock::now();
+                duration<double, std::milli> totalspeed = endtime - starttime;
                 duration<double, std::milli> processingspeed = endtime - downloadtime;
-                cout << processingspeed.count() << endl;
+                cout << "Processing speed: " << processingspeed.count()
+                     << "ms, Total speed: " << totalspeed.count() << "ms" << endl;
             }
             lock.unlock();
             this_thread::sleep_until(
@@ -415,6 +450,7 @@ private:
 
 int main() {
     //    Pistache::Address addr(Pistache::Ipv4::any(), Pistache::Port(9080));
+    initialize();
     Server entrypoint;
     entrypoint.initialize();
     entrypoint.start();
