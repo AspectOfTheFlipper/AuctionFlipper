@@ -335,7 +335,7 @@ private:
 
     bool authenticated(string const &UUID, string const &key, string const &IP) {
         ofstream log;
-        log.open("log.txt");
+        log.open("log.txt", ofstream::out | ofstream::app);
         auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         log << "Player UUID: " << UUID << " Key: " << key << " IP: " << IP <<
             " Time: " << std::put_time(std::localtime(
