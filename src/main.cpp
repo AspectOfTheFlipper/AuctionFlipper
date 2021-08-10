@@ -12,6 +12,7 @@
 //#include <pistache/peer.h>
 //#include <pistache/router.h>
 #define cURL::CURLOPT_TCP_NO_DELAY
+
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
@@ -115,7 +116,7 @@ private:
     mutex writing, lock, exit;
     condition_variable exitc;
     atomic<int> threads = 0;
-    multimap<string, tuple<int, string, long long, string, string>> GlobalPrices;
+    map<string, set<tuple<int, string, long long, string, string>>> GlobalPrices;
     set<string> UniqueIDs;
     atomic<bool> running;
     nlohmann::json AveragePrice;
@@ -209,7 +210,7 @@ private:
         while (running) {
             ifstream WhitelistJson("whitelist.json");
             auto whitelist = nlohmann::json::parse(WhitelistJson);
-            Auth = whitelist.get < map < string, string >> ();
+            Auth = whitelist.get<map<string, string >>();
             this_thread::sleep_for(chrono::seconds(15));
         }
     }
@@ -218,7 +219,7 @@ private:
         ++threads;
         auto starttime = high_resolution_clock::now();
         ostringstream getStream;
-        multimap<string, tuple<int, string, long long, string, string>> prices;
+        map<string, set<tuple<int, string, long long, string, string>>> prices;
         set<string> localUniqueIDs;
         curlpp::Easy get;
         curlpp::Cleanup cleaner;
@@ -297,19 +298,31 @@ private:
                                 .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                 .at<nbt::TagString>("id");
                     }
-                    prices.insert({ID, tuple<int, string, long long, string, string>(
-                            getJson["auctions"][i]["starting_bid"],
-                            getJson["auctions"][i]["uuid"],
-                            getJson["auctions"][i]["start"],
-                            getJson["auctions"][i]["item_name"],
-                            getJson["auctions"][i]["tier"])});
-                    localUniqueIDs.insert(ID);
+                    if (prices.find(ID) != prices.end()) {
+                        prices.find(ID)->second.insert(tuple<int, string, long long, string, string>(
+                                getJson["auctions"][i]["starting_bid"],
+                                getJson["auctions"][i]["uuid"],
+                                getJson["auctions"][i]["start"],
+                                getJson["auctions"][i]["item_name"],
+                                getJson["auctions"][i]["tier"]));
+                    } else {
+                        prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                getJson["auctions"][i]["starting_bid"],
+                                getJson["auctions"][i]["uuid"],
+                                getJson["auctions"][i]["start"],
+                                getJson["auctions"][i]["item_name"],
+                                getJson["auctions"][i]["tier"])}});
+                        localUniqueIDs.insert(ID);
+                    }
                 }
 
             }
             writing.lock();
             UniqueIDs.merge(localUniqueIDs);
             GlobalPrices.merge(prices);
+            for (auto &i : prices) {
+                GlobalPrices.find(i.first)->second.merge(i.second);
+            }
             writing.unlock();
             auto endtime = high_resolution_clock::now();
             duration<double, std::milli> totalspeed = endtime - starttime;
@@ -320,7 +333,7 @@ private:
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
     }
 
-    bool authenticated(string UUID, string key, string IP) {
+    bool authenticated(string const &UUID, string const &key, string const &IP) {
         ofstream log;
         log.open("log.txt");
         auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -361,117 +374,128 @@ private:
                 //Processing
                 auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
-                    if (GlobalPrices.find(member)->first == next(GlobalPrices.find(member))->first) //2 or more
+                    if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
                         if (AveragePrice[member]["price"].is_null()) {
                             //cout<<"COULD NOT FIND AVERAGE PRICE FOR: "<<member<<"\n";
-                            if (get<0>(GlobalPrices.find(member)->second) <=
-                                get<0>(next(GlobalPrices.find(member))->second) - margin) {
-                                if (get<2>(GlobalPrices.find(member)->second) >= lastUpdate) {
+                            if (get<0>(*(GlobalPrices.find(member)->second.begin())) <=
+                                get<0>(*next(GlobalPrices.find(member)->second.begin())) - margin) {
+                                if (get<2>(*GlobalPrices.find(member)->second.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
-                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*GlobalPrices.find(member)->second.begin()))),
                                             make_pair("buy_price",
-                                                      get<0>(GlobalPrices.find(member)->second)),
+                                                      get<0>(*GlobalPrices.find(member)->second.begin())),
                                             make_pair("sell_price",
-                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                      get<0>(*next(GlobalPrices.find(member)->second.begin())) - 1),
+                                            make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 } else {
                                     bin_full[bin_full.size()] = {
-                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*GlobalPrices.find(member)->second.begin()))),
                                             make_pair("buy_price",
-                                                      get<0>(GlobalPrices.find(member)->second)),
+                                                      get<0>(*GlobalPrices.find(member)->second.begin())),
                                             make_pair("sell_price",
-                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                      get<0>(*next(GlobalPrices.find(member)->second.begin())) - 1),
+                                            make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 }
-                            } else if (get<0>(GlobalPrices.find(member)->second) <=
-                                       get<0>(next(GlobalPrices.find(member))->second)) {
+                            } else if (get<0>(*GlobalPrices.find(member)->second.begin()) <=
+                                       get<0>(*next(GlobalPrices.find(member))->second.begin())) {
                                 bin_free[bin_free.size()] = {
-                                        make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                        make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                        make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
+                                        make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                        make_pair("item_name", (get<3>(*GlobalPrices.find(member)->second.begin()))),
+                                        make_pair("buy_price", get<0>(*GlobalPrices.find(member)->second.begin())),
                                         make_pair("sell_price",
-                                                  get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                        make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                  get<0>(*next(GlobalPrices.find(member)->second.begin())) - 1),
+                                        make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                             }
                         } else {
-                            if (get<0>(GlobalPrices.find(member)->second) <=
-                                min(get<0>(next(GlobalPrices.find(member))->second),
+                            if (get<0>(*GlobalPrices.find(member)->second.begin()) <=
+                                min(get<0>(*next(GlobalPrices.find(member)->second.begin())),
                                     AveragePrice[member]["price"].get<int>()) - margin) {
-                                if (get<2>(GlobalPrices.find(member)->second) >= lastUpdate) {
+                                if (get<2>(*GlobalPrices.find(member)->second.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
-                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*GlobalPrices.find(member)->second.begin()))),
                                             make_pair("buy_price",
-                                                      get<0>(GlobalPrices.find(member)->second)),
+                                                      get<0>(*GlobalPrices.find(member)->second.begin())),
                                             make_pair("sell_price",
-                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                      min(AveragePrice[member]["price"].get<int>(),
+                                                          get<0>(*next(GlobalPrices.find(member)->second.begin()))) -
+                                                      1),
+                                            make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 } else {
                                     bin_full[bin_full.size()] = {
-                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*GlobalPrices.find(member)->second.begin()))),
                                             make_pair("buy_price",
-                                                      get<0>(GlobalPrices.find(member)->second)),
+                                                      get<0>(*GlobalPrices.find(member)->second.begin())),
                                             make_pair("sell_price",
-                                                      AveragePrice[member]["price"].get<int>() - 1),
-                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                      min(AveragePrice[member]["price"].get<int>(),
+                                                          get<0>(*next(GlobalPrices.find(member)->second.begin()))) -
+                                                      1),
+                                            make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 }
-                            } else if (get<0>(GlobalPrices.find(member)->second) <=
-                                       min(get<0>(next(GlobalPrices.find(member))->second),
+                            } else if (get<0>(*GlobalPrices.find(member)->second.begin()) <
+                                       min(get<0>(*next(GlobalPrices.find(member)->second.begin())),
                                            AveragePrice[member]["price"].get<int>())) {
                                 bin_free[bin_free.size()] = {
-                                        make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                        make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                        make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
+                                        make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                        make_pair("item_name", (get<3>(*GlobalPrices.find(member)->second.begin()))),
+                                        make_pair("buy_price", get<0>(*GlobalPrices.find(member)->second.begin())),
                                         make_pair("sell_price",
-                                                  get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                        make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                  min(AveragePrice[member]["price"].get<int>(),
+                                                      get<0>(*next(GlobalPrices.find(member)->second.begin()))) - 1),
+                                        make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                             }
                         }
                     } else {
                         if (AveragePrice[member].is_null()) {
                             // cout<<"UNABLE TO CLASSIFY: "<<member<<"\n";
                             unsortable[unsortable.size()] = {
-                                    make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                    make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
-                                    make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
-                                    make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                    make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                    make_pair("item_name", (get<3>(*GlobalPrices.find(member)->second.begin()))),
+                                    make_pair("buy_price", get<0>(*GlobalPrices.find(member)->second.begin())),
+                                    make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
 
                         } else {
-                            if (get<0>(GlobalPrices.find(member)->second) <=
+                            if (get<0>(*GlobalPrices.find(member)->second.begin()) <=
                                 AveragePrice[member]["price"].get<int>() - margin) {
-                                if (get<2>(GlobalPrices.find(member)->second) >= lastUpdate) {
+                                if (get<2>(*GlobalPrices.find(member)->second.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
-                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*GlobalPrices.find(member)->second.begin()))),
                                             make_pair("buy_price",
-                                                      get<0>(GlobalPrices.find(member)->second)),
+                                                      get<0>(*GlobalPrices.find(member)->second.begin())),
                                             make_pair("sell_price",
-                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                      get<0>(*next(GlobalPrices.find(member)->second.begin())) - 1),
+                                            make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 } else {
                                     bin_full[bin_full.size()] = {
-                                            make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
-                                            make_pair("item_name", (get<3>(GlobalPrices.find(member)->second))),
+                                            make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*GlobalPrices.find(member)->second.begin()))),
                                             make_pair("buy_price",
-                                                      get<0>(GlobalPrices.find(member)->second)),
+                                                      get<0>(*GlobalPrices.find(member)->second.begin())),
                                             make_pair("sell_price",
-                                                      get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                            make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                      get<0>(*next(GlobalPrices.find(member)->second.begin())) - 1),
+                                            make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 }
-                            } else if (get<0>(GlobalPrices.find(member)->second) <=
+                            } else if (get<0>(*GlobalPrices.find(member)->second.begin()) <
                                        AveragePrice[member]["price"].get<int>()) {
                                 bin_free[bin_free.size()] = {
-                                        make_pair("uuid", (get<1>(GlobalPrices.find(member)->second))),
+                                        make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
                                         make_pair("item_name",
-                                                  (get<3>(GlobalPrices.find(member)->second))),
-                                        make_pair("buy_price", get<0>(GlobalPrices.find(member)->second)),
+                                                  (get<3>(*GlobalPrices.find(member)->second.begin()))),
+                                        make_pair("buy_price", get<0>(*GlobalPrices.find(member)->second.begin())),
                                         make_pair("sell_price",
-                                                  get<0>(next(GlobalPrices.find(member))->second) - 1),
-                                        make_pair("tier", (get<4>(GlobalPrices.find(member)->second)))};
+                                                  get<0>(*next(GlobalPrices.find(member)->second.begin())) - 1),
+                                        make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                             }
                         }
                     }
