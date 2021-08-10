@@ -23,6 +23,7 @@
 #include "nbt.hpp"
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <fstream>
 //using namespace Pistache;
 using namespace cURLpp;
 using namespace std;
@@ -39,17 +40,31 @@ public:
         CROW_ROUTE(CrowServer, "/")([] {
             return "Healthy";
         });
-        CROW_ROUTE(CrowServer, "/sniper")([this] {
-            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                        {"auctions", sniper}}).dump());
-            response.add_header("Content-Type", "application/json");
-            return response;
+        CROW_ROUTE(CrowServer, "/sniper")([this](const crow::request &req) {
+            if (req.url_params.get("uuid") != nullptr && req.url_params.get("key") != nullptr &&
+                authenticated(string(req.url_params.get("uuid")),
+                              string(req.url_params.get("key")),
+                              req.remoteIpAddress)) {
+                auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                            {"auctions", sniper}}).dump());
+                response.add_header("Content-Type", "application/json");
+                return response;
+            } else {
+                return crow::response(403);
+            }
         });
-        CROW_ROUTE(CrowServer, "/bin_full")([this] {
-            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                        {"auctions", bin_full}}).dump());
-            response.add_header("Content-Type", "application/json");
-            return response;
+        CROW_ROUTE(CrowServer, "/bin_full")([this](const crow::request &req) {
+            if (req.url_params.get("uuid") != nullptr && req.url_params.get("key") != nullptr &&
+                authenticated(string(req.url_params.get("uuid")),
+                              string(req.url_params.get("key")),
+                              req.remoteIpAddress)) {
+                auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                            {"auctions", bin_full}}).dump());
+                response.add_header("Content-Type", "application/json");
+                return response;
+            } else {
+                return crow::response(403);
+            }
         });
         CROW_ROUTE(CrowServer, "/bin_free")([this] {
             auto response = crow::response(200, nlohmann::json::object({{"success",  true},
@@ -57,11 +72,19 @@ public:
             response.add_header("Content-Type", "application/json");
             return response;
         });
-        CROW_ROUTE(CrowServer, "/misc")([this] {
-            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                        {"auctions", unsortable}}).dump());
-            response.add_header("Content-Type", "application/json");
-            return response;
+        CROW_ROUTE(CrowServer, "/misc")([this](const crow::request &req) {
+            if (req.url_params.get("uuid") != nullptr && req.url_params.get("key") != nullptr &&
+                authenticated(string(req.url_params.get("uuid")),
+                              string(req.url_params.get("key")),
+                              req.remoteIpAddress)) {
+                auto response = crow::response(200, nlohmann::json::object({{"success",  true},
+                                                                            {"auctions", unsortable}}).dump());
+                response.add_header("Content-Type", "application/json");
+                return response;
+            } else {
+                return crow::response(403);
+            }
+
         });
     }
 
@@ -69,10 +92,13 @@ public:
         running = true;
         thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
+        thread AuthApi([this]() { getAuth(); });
         CrowServer.port(port).multithreaded().run();
         std::lock_guard<std::mutex> clock(exit);
         running = false;
         exitc.notify_all();
+        AuthApi.join();
+        cout << "AuthAPI exited." << endl;
         AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
@@ -176,6 +202,15 @@ private:
             for (int i = 0; i < 720; ++i) {
                 if (!running) break; else this_thread::sleep_for(chrono::seconds(15));
             }
+        }
+    }
+
+    void getAuth() {
+        while (running) {
+            ifstream WhitelistJson("whitelist.json");
+            auto whitelist = nlohmann::json::parse(WhitelistJson);
+            Auth = whitelist.get < map < string, string >> ();
+            this_thread::sleep_for(chrono::seconds(15));
         }
     }
 
@@ -286,7 +321,14 @@ private:
     }
 
     bool authenticated(string UUID, string key, string IP) {
-
+        ofstream log;
+        log.open("log.txt");
+        auto time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        log << "Player UUID: " << UUID << " Key: " << key << " IP: " << IP <<
+            " Time: " << std::put_time(std::localtime(
+                &time), "%Y-%m-%d %X") << '\n';
+        log.close();
+        return (Auth.find(UUID) != Auth.end() && Auth.find(UUID)->second == key);
     }
 
     void HyAPI() {
