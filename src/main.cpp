@@ -12,6 +12,7 @@
 //#include <pistache/peer.h>
 //#include <pistache/router.h>
 #define cURL::CURLOPT_TCP_NO_DELAY
+
 #include <curlpp/Infos.hpp>
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
@@ -91,16 +92,15 @@ public:
 
     void start() {
         running = true;
-	get.resize(200);
-	for(int i=0; i<200; ++i)
-	{
-		get[page].setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
-	}
+        getThreaded.resize(200);
+        for (int page = 0; page < 200; ++page) {
+            getThreaded[page].setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
+        }
 //        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
-	thread ClearCache([this]() { clearCache(); });  
-      CrowServer.port(port).multithreaded().run();
+        thread ClearCache([this]() { clearCache(); });
+        CrowServer.port(port).multithreaded().run();
         std::lock_guard<std::mutex> clock(exit);
         running = false;
         exitc.notify_all();
@@ -122,7 +122,7 @@ private:
     mutex writing, lock, exit;
     condition_variable exitc;
     atomic<int> threads = 0;
-    vector<curlpp::Easy> get;
+    vector<curlpp::Easy> getThreaded;
     unordered_map<string, set<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
@@ -239,11 +239,11 @@ private:
         unordered_map<string, set<tuple<int, string, long long, string, string>>> prices;
         unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
         set<string> localUniqueIDs;
-        get[page].setOpt(curlpp::options::WriteStream(&getStream));
-	get[page].setOpt(options::TcpNoDelay(true));
-        get[page].perform();
-	auto http_code = curlpp::infos::ResponseCode::get(get);
-	if(http_code != 200 || getStream.str()=="") return {0, updated};
+        getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream));
+        getThreaded[page].setOpt(options::TcpNoDelay(true));
+        getThreaded[page].perform();
+        auto http_code = curlpp::infos::ResponseCode::get(getThreaded[page]);
+        if (http_code != 200 || getStream.str() == "") return {0, updated};
         auto downloadtime = high_resolution_clock::now();
         auto getJson = nlohmann::json::parse(getStream.str());
         int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();

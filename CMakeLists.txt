@@ -25,6 +25,7 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Ofast -m64 -std=c++20 -pthread")
 #include_directories("include")
 #target_link_libraries(AuctionFlipper PRIVATE ${LIBRARIES_SEARCH_PATHS})
 target_link_libraries(AuctionFlipper PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(AuctionFlipper PRIVATE "${ZLIB_LIBRARIES}")
 #target_link_libraries(AuctionFlipper PRIVATE "${PROJECT_SOURCE_DIR}/lib/libnbt++.a")
 #CurlPP reserved
 # cURLpp requires libcurl to be installed
