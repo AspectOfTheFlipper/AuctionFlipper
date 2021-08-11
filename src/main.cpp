@@ -207,8 +207,7 @@ private:
             ostringstream getStreams;
             AveragePrice.clear();
             Easy Avg;
-            Avg.setOpt(options::Url("localhost/api/average_prices"));
-            Avg.setOpt(options::Port(24695));
+            Avg.setOpt(options::Url("localhost:24695/api/average_prices"));
             Avg.perform();
             AveragePrice.parse(getStreams.str());
             lock.unlock();
