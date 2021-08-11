@@ -204,11 +204,13 @@ private:
     void get3DayAvg() {
         while (running) {
             lock.lock();
-            ostringstream getStream;
-            getStream << options::Url("https://moulberry.codes/auction_averages/3day.json.gz");
-            istringstream str(getStream.str());
-            zstr::istream decoded(str);
-            decoded >> AveragePrice;
+            ostringstream getStreams;
+            AveragePrice.clear();
+            Easy Avg;
+            Avg.setOpt(options::Url("localhost/api/average_prices"));
+            Avg.setOpt(options::Port(24695));
+            Avg.perform();
+            AveragePrice.parse(getStreams.str());
             lock.unlock();
             for (int i = 0; i < 720; ++i) {
                 if (!running) return; else this_thread::sleep_for(chrono::seconds(15));
