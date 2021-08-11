@@ -92,7 +92,6 @@ public:
 
     void start() {
         running = true;
-        getThreaded.resize(200);
         for (int page = 0; page < 200; ++page) {
             getThreaded[page].setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
         }
@@ -122,7 +121,7 @@ private:
     mutex writing, lock, exit;
     condition_variable exitc;
     atomic<int> threads = 0;
-    vector<curlpp::Easy> getThreaded;
+    curlpp::Easy getThreaded[200];
     unordered_map<string, set<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
@@ -394,7 +393,7 @@ private:
             children.reserve(information.first);
             if (information.second == updated) {
                 cout << "HyAPI has not updated yet. Sleeping Thread.\n";
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 lock.unlock();
                 continue;
             } else {
@@ -547,7 +546,7 @@ private:
             }
             lock.unlock();
             this_thread::sleep_until(
-                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 62000}));
+                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 64000}));
         }
     }
 
