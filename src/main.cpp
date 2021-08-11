@@ -91,16 +91,17 @@ public:
 
     void start() {
         running = true;
-        thread AvgApi([this]() { get3DayAvg(); });
+//        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
-        CrowServer.port(port).multithreaded().run();
+	thread ClearCache([this]() { clearCache(); });  
+      CrowServer.port(port).multithreaded().run();
         std::lock_guard<std::mutex> clock(exit);
         running = false;
         exitc.notify_all();
         AuthApi.join();
         cout << "AuthAPI exited." << endl;
-        AvgApi.join();
+//        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
@@ -125,7 +126,7 @@ private:
             bin_free, unsortable;
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
-    int port = 8080;
+    int port = 80;
     const int margin = 1000000;
     map<string, int> tiers{
             {"COMMON",    0},
@@ -243,7 +244,7 @@ private:
         int size = getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
             for (int i = 0; i < size; ++i) {
-//                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
+                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
                 if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
                     auto val = Cache.find(getJson["auctions"][i]["uuid"].get<string>());
                     if (val != Cache.end()) {
@@ -359,7 +360,7 @@ private:
             auto endtime = high_resolution_clock::now();
             duration<double, std::milli> totalspeed = endtime - starttime;
             duration<double, std::milli> downloadspeed = downloadtime - starttime;
-            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
+//            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
         }
         --threads;
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
@@ -399,6 +400,7 @@ private:
                 updated = information.second;
                 long long lastUpdate = information.second - 60000;
                 for (int i = 1; i < information.first; ++i) {
+//                      getPage(i);
                     children.emplace_back([this](int i) { getPage(i); }, i);
                 }
                 for (auto &child : children)
@@ -434,7 +436,7 @@ private:
                                             make_pair("tier", (get<4>(*GlobalPrices.find(member)->second.begin())))};
                                 }
                             } else if (get<0>(*GlobalPrices.find(member)->second.begin()) <=
-                                       get<0>(*next(GlobalPrices.find(member))->second.begin())) {
+                                       get<0>(*next(GlobalPrices.find(member)->second.begin()))) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*GlobalPrices.find(member)->second.begin()))),
                                         make_pair("item_name", (get<3>(*GlobalPrices.find(member)->second.begin()))),

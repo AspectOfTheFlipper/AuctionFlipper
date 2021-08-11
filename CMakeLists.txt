@@ -12,6 +12,7 @@ find_package(ZLIB REQUIRED)
 if (ZLIB_FOUND)
     include_directories(${ZLIB_INCLUDE_DIRS})
 endif (ZLIB_FOUND)
+link_directories(/usr/lib/x86_64-linux-gnu)
 #Finding Libraries
 #set(PROJECT_INCLUDE_DIR "include")
 #set(NBT_INCLUDE_DIR "include/libnbt++")
@@ -29,6 +30,7 @@ target_link_libraries(AuctionFlipper PRIVATE nlohmann_json::nlohmann_json)
 # cURLpp requires libcurl to be installed
 message(STATUS "Looking for curl...")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(AuctionFlipper PRIVATE "${ZLIB_LIBRARIES}")
 #add_library(NBTLib STATIC "${NBT}")
 find_package(CURL REQUIRED)
 
