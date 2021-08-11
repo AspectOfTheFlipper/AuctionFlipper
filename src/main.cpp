@@ -244,7 +244,7 @@ private:
         int size = getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
             for (int i = 0; i < size; ++i) {
-                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
+//                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
                 if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
                     auto val = Cache.find(getJson["auctions"][i]["uuid"].get<string>());
                     if (val != Cache.end()) {
