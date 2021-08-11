@@ -95,6 +95,8 @@ public:
         getThreaded.resize(200);
         for (int page = 0; page < 200; ++page) {
             getThreaded[page].setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
+            getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
+            getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
 //        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
@@ -132,6 +134,7 @@ private:
             bin_free, unsortable;
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
+    ostringstream getStream[200];
     int port = 80;
     const int margin = 1000000;
     map<string, int> tiers{
@@ -235,17 +238,14 @@ private:
     pair<int, long long> getPage(int page) {
         ++threads;
         auto starttime = high_resolution_clock::now();
-        ostringstream getStream;
         unordered_map<string, set<tuple<int, string, long long, string, string>>> prices;
         unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
         set<string> localUniqueIDs;
-        getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream));
-        getThreaded[page].setOpt(options::TcpNoDelay(true));
         getThreaded[page].perform();
         auto http_code = curlpp::infos::ResponseCode::get(getThreaded[page]);
-        if (http_code != 200 || getStream.str() == "") return {0, updated};
+        if (http_code != 200 || getStream[page].str() == "") return {0, updated};
         auto downloadtime = high_resolution_clock::now();
-        auto getJson = nlohmann::json::parse(getStream.str());
+        auto getJson = nlohmann::json::parse(getStream[page].str());
         int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
             for (int i = 0; i < size; ++i) {
