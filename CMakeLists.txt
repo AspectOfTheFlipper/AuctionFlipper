@@ -56,5 +56,4 @@ endif ()
 
 target_link_libraries(AuctionFlipper PRIVATE ${CURL_LIBRARIES})
 target_link_libraries(AuctionFlipper PRIVATE ${CURLPP_LIBRARY})
-target_link_libraries(AuctionFlipper PRIVATE Qt5::Widgets ${ZLIB_LIBRARIES})
 #target_link_libraries(AuctionFlipper PRIVATE NBTLib)
