@@ -12,7 +12,7 @@
 //#include <pistache/peer.h>
 //#include <pistache/router.h>
 #define cURL::CURLOPT_TCP_NO_DELAY
-
+#include <curlpp/Infos.hpp>
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
@@ -91,6 +91,11 @@ public:
 
     void start() {
         running = true;
+	get.resize(200);
+	for(int i=0; i<200; ++i)
+	{
+		get[page].setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
+	}
 //        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
@@ -117,6 +122,7 @@ private:
     mutex writing, lock, exit;
     condition_variable exitc;
     atomic<int> threads = 0;
+    vector<curlpp::Easy> get;
     unordered_map<string, set<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
@@ -233,15 +239,14 @@ private:
         unordered_map<string, set<tuple<int, string, long long, string, string>>> prices;
         unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
         set<string> localUniqueIDs;
-        curlpp::Easy get;
-        curlpp::Cleanup cleaner;
-        get.setOpt(curlpp::options::WriteStream(&getStream));
-        get.setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
-        get.setOpt(options::TcpNoDelay(true));
-        get.perform();
+        get[page].setOpt(curlpp::options::WriteStream(&getStream));
+	get[page].setOpt(options::TcpNoDelay(true));
+        get[page].perform();
+	auto http_code = curlpp::infos::ResponseCode::get(get);
+	if(http_code != 200 || getStream.str()=="") return {0, updated};
         auto downloadtime = high_resolution_clock::now();
         auto getJson = nlohmann::json::parse(getStream.str());
-        int size = getJson["auctions"].size();
+        int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
             for (int i = 0; i < size; ++i) {
 //                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
@@ -360,7 +365,7 @@ private:
             auto endtime = high_resolution_clock::now();
             duration<double, std::milli> totalspeed = endtime - starttime;
             duration<double, std::milli> downloadspeed = downloadtime - starttime;
-//            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
+            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
         }
         --threads;
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
@@ -389,7 +394,7 @@ private:
             children.reserve(information.first);
             if (information.second == updated) {
                 cout << "HyAPI has not updated yet. Sleeping Thread.\n";
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 lock.unlock();
                 continue;
             } else {
@@ -542,7 +547,7 @@ private:
             }
             lock.unlock();
             this_thread::sleep_until(
-                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 60000}));
+                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 62000}));
         }
     }
 
