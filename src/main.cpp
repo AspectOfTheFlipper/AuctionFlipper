@@ -97,7 +97,7 @@ public:
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
-//        thread AvgApi([this]() { get3DayAvg(); });
+        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
@@ -107,7 +107,7 @@ public:
         exitc.notify_all();
         AuthApi.join();
         cout << "AuthAPI exited." << endl;
-//        AvgApi.join();
+        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
