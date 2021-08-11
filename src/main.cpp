@@ -16,7 +16,7 @@
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 #include "crow_all.h"
 #include <zlib.h>
 #include <cppcodec/base64_rfc4648.hpp>
@@ -116,14 +116,15 @@ private:
     mutex writing, lock, exit;
     condition_variable exitc;
     atomic<int> threads = 0;
-    map<string, set<tuple<int, string, long long, string, string>>> GlobalPrices;
+    unordered_map<string, set<tuple<int, string, long long, string, string>>> GlobalPrices;
+    unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
     atomic<bool> running;
     nlohmann::json AveragePrice;
     nlohmann::json sniper, bin_full,
             bin_free, unsortable;
     atomic<long long> updated = 0;
-    map<string, string> Auth;
+    unordered_map<string, string> Auth;
     int port = 8080;
     const int margin = 1000000;
     map<string, int> tiers{
@@ -201,8 +202,17 @@ private:
             decoded >> AveragePrice;
             lock.unlock();
             for (int i = 0; i < 720; ++i) {
-                if (!running) break; else this_thread::sleep_for(chrono::seconds(15));
+                if (!running) return; else this_thread::sleep_for(chrono::seconds(15));
             }
+        }
+    }
+
+    void clearCache() {
+        while (running) {
+            if (Cache.size() > 10000000) {
+                Cache.clear();
+            }
+            this_thread::sleep_for(chrono::seconds(60));
         }
     }
 
@@ -210,7 +220,7 @@ private:
         while (running) {
             ifstream WhitelistJson("whitelist.json");
             auto whitelist = nlohmann::json::parse(WhitelistJson);
-            Auth = whitelist.get<map<string, string >>();
+            Auth = whitelist.get<unordered_map<string, string >>();
             this_thread::sleep_for(chrono::seconds(15));
         }
     }
@@ -219,7 +229,8 @@ private:
         ++threads;
         auto starttime = high_resolution_clock::now();
         ostringstream getStream;
-        map<string, set<tuple<int, string, long long, string, string>>> prices;
+        unordered_map<string, set<tuple<int, string, long long, string, string>>> prices;
+        unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
         set<string> localUniqueIDs;
         curlpp::Easy get;
         curlpp::Cleanup cleaner;
@@ -234,85 +245,105 @@ private:
             for (int i = 0; i < size; ++i) {
 //                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
                 if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
-                    auto c = cppcodec::base64_rfc4648::decode(
-                            getJson["auctions"][i]["item_bytes"].get<string>());
-                    string d(c.begin(), c.end());
-
-                    nbt::NBT nbtdata;
-                    istringstream str(d);
-                    zstr::istream decoded(str);
-                    nbtdata.decode(decoded);
-                    string ID;
-                    if (nbt::get_list<nbt::TagCompound>
-                                (nbtdata.at<nbt::TagList>("i"))[0]
-                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
-                                .find("enchantments") != nbt::get_list<nbt::TagCompound>
-                                (nbtdata.at<nbt::TagList>("i"))[0]
-                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end() &&
-                        nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
-                        auto enchantments = nbt::get_list<nbt::TagCompound>
-                                (nbtdata.at<nbt::TagList>("i"))[0]
-                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                .at<nbt::TagCompound>("enchantments");
-                        ID = enchantments.base.begin()->first + ";" +
-                             to_string(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
-                        for (auto &f : ID) f = toupper(f);
-                    } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                       .at<nbt::TagString>("id") == "PET") {
-                        auto petInfo = nlohmann::json::parse(
-                                nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                        .at<nbt::TagString>("petInfo"));
-                        ID = petInfo["type"].get<string>() + ";" + to_string(to_tier
-                                                                                     (petInfo["tier"].get<string>()))
-                             + (isLevel100(to_tier(petInfo["tier"]),
-                                           petInfo["exp"]) ? ";100" : "");
-
-                    } else if (nbt::get_list<nbt::TagCompound>
-                                       (nbtdata.at<nbt::TagList>("i"))[0]
-                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                       .at<nbt::TagString>("id").length() > 8
-                               && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                          .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                          .at<nbt::TagString>("id").substr(nbt::get_list<nbt::TagCompound>
-                                                                                   (nbtdata.at<nbt::TagList>("i"))[0]
-                                                                                   .at<nbt::TagCompound>(
-                                                                                           "tag").at<nbt::TagCompound>(
-                                            "ExtraAttributes")
-                                                                                   .at<nbt::TagString>("id").length() -
-                                                                           8) == "_STARRED") {
-                        ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                .at<nbt::TagString>("id").substr(0, nbt::get_list<nbt::TagCompound>(
-                                        nbtdata.at<nbt::TagList>("i"))[0]
-                                                                            .at<nbt::TagCompound>(
-                                                                                    "tag").at<nbt::TagCompound>(
-                                                "ExtraAttributes")
-                                                                            .at<nbt::TagString>("id").length() - 8);
-                    }
-                    {
-                        ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                .at<nbt::TagString>("id");
-                    }
-                    if (prices.find(ID) != prices.end()) {
-                        prices.find(ID)->second.insert(tuple<int, string, long long, string, string>(
-                                getJson["auctions"][i]["starting_bid"],
-                                getJson["auctions"][i]["uuid"],
-                                getJson["auctions"][i]["start"],
-                                getJson["auctions"][i]["item_name"],
-                                getJson["auctions"][i]["tier"]));
+                    auto val = Cache.find(getJson["auctions"][i]["uuid"].get<string>());
+                    if (val != Cache.end()) {
+                        if (prices.find(val->second.first) != prices.end()) {
+                            prices.find(val->second.first)->
+                                    second.insert(val->second.second);
+                        } else {
+                            prices.insert({val->second.first, {val->second.second}});
+                            localUniqueIDs.insert(val->second.first);
+                        }
                     } else {
-                        prices.insert({ID, {tuple<int, string, long long, string, string>(
-                                getJson["auctions"][i]["starting_bid"],
-                                getJson["auctions"][i]["uuid"],
-                                getJson["auctions"][i]["start"],
-                                getJson["auctions"][i]["item_name"],
-                                getJson["auctions"][i]["tier"])}});
-                        localUniqueIDs.insert(ID);
+                        auto c = cppcodec::base64_rfc4648::decode(
+                                getJson["auctions"][i]["item_bytes"].get<string>());
+                        string d(c.begin(), c.end());
+
+                        nbt::NBT nbtdata;
+                        istringstream str(d);
+                        zstr::istream decoded(str);
+                        nbtdata.decode(decoded);
+                        string ID;
+                        if (nbt::get_list<nbt::TagCompound>
+                                    (nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
+                                    .find("enchantments") != nbt::get_list<nbt::TagCompound>
+                                    (nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end() &&
+                            nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
+                            auto enchantments = nbt::get_list<nbt::TagCompound>
+                                    (nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagCompound>("enchantments");
+                            ID = enchantments.base.begin()->first + ";" +
+                                 to_string(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
+                            for (auto &f : ID) f = toupper(f);
+                        } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                           .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                           .at<nbt::TagString>("id") == "PET") {
+                            auto petInfo = nlohmann::json::parse(
+                                    nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                            .at<nbt::TagString>("petInfo"));
+                            ID = petInfo["type"].get<string>() + ";" + to_string(to_tier
+                                                                                         (petInfo["tier"].get<string>()))
+                                 + (isLevel100(to_tier(petInfo["tier"]),
+                                               petInfo["exp"]) ? ";100" : "");
+
+                        } else if (nbt::get_list<nbt::TagCompound>
+                                           (nbtdata.at<nbt::TagList>("i"))[0]
+                                           .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                           .at<nbt::TagString>("id").length() > 8
+                                   && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                              .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                              .at<nbt::TagString>("id").substr(nbt::get_list<nbt::TagCompound>
+                                                                                       (nbtdata.at<nbt::TagList>(
+                                                                                               "i"))[0]
+                                                                                       .at<nbt::TagCompound>(
+                                                                                               "tag").at<nbt::TagCompound>(
+                                                "ExtraAttributes")
+                                                                                       .at<nbt::TagString>(
+                                                                                               "id").length() -
+                                                                               8) == "_STARRED") {
+                            ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagString>("id").substr(0, nbt::get_list<nbt::TagCompound>(
+                                            nbtdata.at<nbt::TagList>("i"))[0]
+                                                                                .at<nbt::TagCompound>(
+                                                                                        "tag").at<nbt::TagCompound>(
+                                                    "ExtraAttributes")
+                                                                                .at<nbt::TagString>("id").length() - 8);
+                        }
+                        {
+                            ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagString>("id");
+                        }
+                        if (prices.find(ID) != prices.end()) {
+                            prices.find(ID)->second.insert(tuple<int, string, long long, string, string>(
+                                    getJson["auctions"][i]["starting_bid"],
+                                    getJson["auctions"][i]["uuid"],
+                                    getJson["auctions"][i]["start"],
+                                    getJson["auctions"][i]["item_name"],
+                                    getJson["auctions"][i]["tier"]));
+                        } else {
+                            prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                    getJson["auctions"][i]["starting_bid"],
+                                    getJson["auctions"][i]["uuid"],
+                                    getJson["auctions"][i]["start"],
+                                    getJson["auctions"][i]["item_name"],
+                                    getJson["auctions"][i]["tier"])}});
+                            localUniqueIDs.insert(ID);
+                        }
+                        local_cache.insert({getJson["auctions"][i]["uuid"], {
+                                ID, tuple<int, string, long long, string, string>(
+                                        getJson["auctions"][i]["starting_bid"],
+                                        getJson["auctions"][i]["uuid"],
+                                        getJson["auctions"][i]["start"],
+                                        getJson["auctions"][i]["item_name"],
+                                        getJson["auctions"][i]["tier"])}});
                     }
                 }
 
@@ -323,6 +354,7 @@ private:
             for (auto &i : prices) {
                 GlobalPrices.find(i.first)->second.merge(i.second);
             }
+            Cache.merge(local_cache);
             writing.unlock();
             auto endtime = high_resolution_clock::now();
             duration<double, std::milli> totalspeed = endtime - starttime;
