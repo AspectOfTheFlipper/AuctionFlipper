@@ -8,7 +8,6 @@ add_executable(AuctionFlipper src/main.cpp src/nbt.hpp src/zstr.hpp
         src/strict_fstream.hpp src/crow_all.h src/json.hpp)
 target_include_directories(AuctionFlipper PUBLIC src/cppcodec)
 #ZLIB
-find_package(Qt5Widgets)
 find_package(ZLIB REQUIRED)
 if (ZLIB_FOUND)
     include_directories(${ZLIB_INCLUDE_DIRS})
