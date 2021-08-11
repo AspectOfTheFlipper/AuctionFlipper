@@ -361,7 +361,7 @@ private:
             }
             Cache.merge(local_cache);
             writing.unlock();
-            getStream[page].flush();
+            getStream[page].str("");
             auto endtime = high_resolution_clock::now();
             duration<double, std::milli> totalspeed = endtime - starttime;
             duration<double, std::milli> downloadspeed = downloadtime - starttime;
