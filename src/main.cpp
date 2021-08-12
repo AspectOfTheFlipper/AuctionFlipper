@@ -136,7 +136,7 @@ private:
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
-    unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
+    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
     atomic<bool> running;
@@ -249,6 +249,7 @@ private:
     pair<int, long long> getPage(int page) {
         ++threads;
         auto starttime = high_resolution_clock::now();
+        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
         unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
         set<string> localUniqueIDs;
         getThreaded[page].perform();
@@ -258,7 +259,6 @@ private:
         auto getJson = nlohmann::json::parse(getStream[page].str());
         int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();
         if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
-            writing.lock();
             for (int i = 0; i < size; ++i) {
 //                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
                 if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
@@ -357,7 +357,13 @@ private:
                 }
 
             }
+            writing.lock();
             UniqueIDs.merge(localUniqueIDs);
+            GlobalPrices.merge(prices);
+            for (auto &i : prices) {
+                auto C = GlobalPrices.find(i.first)->second;
+                C.insert(C.end(), i.second.begin(), i.second.end());
+            }
             Cache.merge(local_cache);
             writing.unlock();
             getStream[page].str("");
@@ -386,7 +392,7 @@ private:
             lock.lock();
             auto starttime = high_resolution_clock::now();
             UniqueIDs.clear();
-            prices.clear();
+            GlobalPrices.clear();
             vector<std::thread> children;
             cout << "Beginning Cycle\n";
             pair<int, long long> information = getPage(0);
@@ -412,8 +418,8 @@ private:
                 //Processing
                 auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
-                    auto &a = prices.find(member)->second;
-                    if (prices.find(member)->second.size() >= 2) //2 or more
+                    auto &a = GlobalPrices.find(member)->second;
+                    if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
                         sort(a.begin(), a.end());
                         if (AveragePrice[member]["price"].is_null()) {
