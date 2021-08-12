@@ -109,7 +109,7 @@ public:
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
-//        thread AvgApi([this]() { get3DayAvg(); });
+        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
@@ -119,7 +119,7 @@ public:
         exitc.notify_all();
         AuthApi.join();
         cout << "AuthAPI exited." << endl;
-//        AvgApi.join();
+        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
@@ -216,11 +216,9 @@ private:
     void get3DayAvg() {
         while (running) {
             lock.lock();
-            ostringstream getStream;
-            getStream << options::Url("https://moulberry.codes/auction_averages/3day.json.gz");
-            istringstream str(getStream.str());
-            zstr::istream decoded(str);
-            decoded >> AveragePrice;
+            ostringstream getStreams;
+            getStreams << options::Url("https://cemc.uwaterloo.ca/contests/past_contests/2009/2009EuclidSolution.pdf");
+            AveragePrice.parse(getStreams.str());
             lock.unlock();
             for (int i = 0; i < 720; ++i) {
                 if (!running) return; else this_thread::sleep_for(chrono::seconds(15));
@@ -366,10 +364,6 @@ private:
             Cache.merge(local_cache);
             writing.unlock();
             getStream[page].str("");
-            auto endtime = high_resolution_clock::now();
-            duration<double, std::milli> totalspeed = endtime - starttime;
-            duration<double, std::milli> downloadspeed = downloadtime - starttime;
-            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
         }
         --threads;
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
@@ -555,7 +549,6 @@ private:
                 duration<double, std::milli> processingspeed = endtime - downloadtime;
                 cout << "Processing speed: " << processingspeed.count()
                      << "ms, Total speed: " << totalspeed.count() << "ms" << endl;
-                cout << count << endl;
             }
             lock.unlock();
             this_thread::sleep_until(
