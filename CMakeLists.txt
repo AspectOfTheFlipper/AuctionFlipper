@@ -20,7 +20,7 @@ link_directories(/usr/lib/x86_64-linux-gnu)
 #set(HEADER_SEARCH_PATHS ${PROJECT_INCLUDE_DIR} ${NBT_INCLUDE_DIR})
 #set(LIBRARIES_SEARCH_PATHS ${PISTACHE_LIBRARY})
 find_package(nlohmann_json 3.2.0 REQUIRED)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Ofast -m64 -std=c++20 -pthread")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -m64 -std=c++20 -pthread")
 #Building
 #include_directories("include")
 #target_link_libraries(AuctionFlipper PRIVATE ${LIBRARIES_SEARCH_PATHS})
