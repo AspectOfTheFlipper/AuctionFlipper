@@ -48,7 +48,7 @@ public:
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
                 auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                            {"auctions", sniper}}).dump());
+                                                                            {"auctions", sniper}, {"updated":updated}}).dump());
                 response.add_header("Content-Type", "application/json");
                 return response;
             } else {
@@ -61,7 +61,7 @@ public:
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
                 auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                            {"auctions", bin_full}}).dump());
+                                                                            {"auctions", bin_full},{"updated":updated}}).dump());
                 response.add_header("Content-Type", "application/json");
                 return response;
             } else {
@@ -70,7 +70,7 @@ public:
         });
         CROW_ROUTE(CrowServer, "/bin_free")([this] {
             auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                        {"auctions", bin_free}}).dump());
+                                                                        {"auctions", bin_free},{"updated":updated}}).dump());
             response.add_header("Content-Type", "application/json");
             return response;
         });
@@ -80,7 +80,7 @@ public:
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
                 auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                            {"auctions", unsortable}}).dump());
+                                                                            {"auctions", unsortable},{"updated":updated}).dump());
                 response.add_header("Content-Type", "application/json");
                 return response;
             } else {
