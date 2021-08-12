@@ -47,8 +47,11 @@ public:
                 authenticated(string(req.url_params.get("uuid")),
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
-                auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                            {"auctions", sniper}, {"updated":updated}}).dump());
+                nlohmann::json js1 = nlohmann::json::object();
+                js1["success"] = true;
+                js1["auctions"] = bin_free;
+                js1["updated"] = updated.load();
+                auto response = crow::response(200, js1.dump());
                 response.add_header("Content-Type", "application/json");
                 return response;
             } else {
@@ -60,8 +63,11 @@ public:
                 authenticated(string(req.url_params.get("uuid")),
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
-                auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                            {"auctions", bin_full},{"updated":updated}}).dump());
+                nlohmann::json js1 = nlohmann::json::object();
+                js1["success"] = true;
+                js1["auctions"] = bin_free;
+                js1["updated"] = updated.load();
+                auto response = crow::response(200, js1.dump());
                 response.add_header("Content-Type", "application/json");
                 return response;
             } else {
@@ -69,8 +75,11 @@ public:
             }
         });
         CROW_ROUTE(CrowServer, "/bin_free")([this] {
-            auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                        {"auctions", bin_free},{"updated":updated}}).dump());
+            nlohmann::json js1 = nlohmann::json::object();
+            js1["success"] = true;
+            js1["auctions"] = bin_free;
+            js1["updated"] = (long long) updated;
+            auto response = crow::response(200, js1.dump());
             response.add_header("Content-Type", "application/json");
             return response;
         });
@@ -79,8 +88,11 @@ public:
                 authenticated(string(req.url_params.get("uuid")),
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
-                auto response = crow::response(200, nlohmann::json::object({{"success",  true},
-                                                                            {"auctions", unsortable},{"updated":updated}).dump());
+                nlohmann::json js1 = nlohmann::json::object();
+                js1["success"] = true;
+                js1["auctions"] = unsortable;
+                js1["updated"] = (long long) updated;
+                auto response = crow::response(200, js1.dump());
                 response.add_header("Content-Type", "application/json");
                 return response;
             } else {
