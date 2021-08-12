@@ -97,7 +97,7 @@ public:
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
-        thread AvgApi([this]() { get3DayAvg(); });
+//        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
@@ -107,7 +107,7 @@ public:
         exitc.notify_all();
         AuthApi.join();
         cout << "AuthAPI exited." << endl;
-        AvgApi.join();
+//        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
@@ -146,7 +146,7 @@ private:
     };
 
     //Functions
-    static bool isLevel100(int tier, int xp) {
+    static bool const isLevel100(int tier, int xp) {
         switch (tier) {
             case 0:
                 return xp >= 5624785;
@@ -363,6 +363,10 @@ private:
             Cache.merge(local_cache);
             writing.unlock();
             getStream[page].str("");
+            auto endtime = high_resolution_clock::now();
+            duration<double, std::milli> totalspeed = endtime - starttime;
+            duration<double, std::milli> downloadspeed = downloadtime - starttime;
+            cout << downloadspeed.count() << "ms, " << totalspeed.count() << "ms\n";
         }
         --threads;
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
@@ -386,9 +390,11 @@ private:
             UniqueIDs.clear();
             GlobalPrices.clear();
             vector<std::thread> children;
+            cout << "Beginning Cycle\n";
             pair<int, long long> information = getPage(0);
             children.reserve(information.first);
             if (information.second == updated) {
+                cout << "HyAPI has not updated yet. Sleeping Thread.\n";
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 lock.unlock();
                 continue;
@@ -409,11 +415,10 @@ private:
                 auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
                     auto a = GlobalPrices.find(member)->second;
-                    auto b = AveragePrice[member]["price"];
                     if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
                         sort(a.begin(), a.end());
-                        if (!b.is_number_integer()) {
+                        if (AveragePrice[member]["price"].is_null()) {
                             //cout<<"COULD NOT FIND AVERAGE PRICE FOR: "<<member<<"\n";
                             if (get<0>(*(a.begin())) <=
                                 get<0>(*next(a.begin())) - margin) {
@@ -451,7 +456,7 @@ private:
                         } else {
                             if (get<0>(*a.begin()) <=
                                 min(get<0>(*next(a.begin())),
-                                    b.get<int>()) - margin) {
+                                    AveragePrice[member]["price"].get<int>()) - margin) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -460,7 +465,7 @@ private:
                                             make_pair("buy_price",
                                                       get<0>(*a.begin())),
                                             make_pair("sell_price",
-                                                      min(b.get<int>(),
+                                                      min(AveragePrice[member]["price"].get<int>(),
                                                           get<0>(*next(a.begin()))) -
                                                       1),
                                             make_pair("tier", (get<4>(*a.begin())))};
@@ -472,20 +477,20 @@ private:
                                             make_pair("buy_price",
                                                       get<0>(*a.begin())),
                                             make_pair("sell_price",
-                                                      min(b.get<int>(),
+                                                      min(AveragePrice[member]["price"].get<int>(),
                                                           get<0>(*next(a.begin()))) -
                                                       1),
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
                             } else if (get<0>(*a.begin()) <
                                        min(get<0>(*next(a.begin())),
-                                           b.get<int>())) {
+                                           AveragePrice[member]["price"].get<int>())) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
                                         make_pair("item_name", (get<3>(*a.begin()))),
                                         make_pair("buy_price", get<0>(*a.begin())),
                                         make_pair("sell_price",
-                                                  min(b.get<int>(),
+                                                  min(AveragePrice[member]["price"].get<int>(),
                                                       get<0>(*next(a.begin()))) - 1),
                                         make_pair("tier", (get<4>(*a.begin())))};
                             }
@@ -499,18 +504,19 @@ private:
                                     make_pair("buy_price", get<0>(*a.begin())),
                                     make_pair("tier", (get<4>(*a.begin())))};
 
-                        } else if (get<0>(*a.begin()) <=
-                                   b.get<int>() - margin) {
-                            if (get<2>(*a.begin()) >= lastUpdate) {
-                                sniper[sniper.size()] = {
-                                        make_pair("uuid", (get<1>(*a.begin()))),
-                                        make_pair("item_name",
-                                                  (get<3>(*a.begin()))),
-                                        make_pair("buy_price",
-                                                  get<0>(*a.begin())),
-                                        make_pair("sell_price",
-                                                  get<0>(*next(a.begin())) - 1),
-                                        make_pair("tier", (get<4>(*a.begin())))};
+                        } else {
+                            if (get<0>(*a.begin()) <=
+                                AveragePrice[member]["price"].get<int>() - margin) {
+                                if (get<2>(*a.begin()) >= lastUpdate) {
+                                    sniper[sniper.size()] = {
+                                            make_pair("uuid", (get<1>(*a.begin()))),
+                                            make_pair("item_name",
+                                                      (get<3>(*a.begin()))),
+                                            make_pair("buy_price",
+                                                      get<0>(*a.begin())),
+                                            make_pair("sell_price",
+                                                      get<0>(*next(a.begin())) - 1),
+                                            make_pair("tier", (get<4>(*a.begin())))};
                                 } else {
                                     bin_full[bin_full.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -523,18 +529,18 @@ private:
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
                             } else if (get<0>(*a.begin()) <
-                                       b.get<int>()) {
-                            bin_free[bin_free.size()] = {
-                                    make_pair("uuid", (get<1>(*a.begin()))),
-                                    make_pair("item_name",
-                                              (get<3>(*a.begin()))),
-                                    make_pair("buy_price", get<0>(*a.begin())),
-                                    make_pair("sell_price",
-                                              get<0>(*next(a.begin())) - 1),
-                                    make_pair("tier", (get<4>(*a.begin())))};
+                                       AveragePrice[member]["price"].get<int>()) {
+                                bin_free[bin_free.size()] = {
+                                        make_pair("uuid", (get<1>(*a.begin()))),
+                                        make_pair("item_name",
+                                                  (get<3>(*a.begin()))),
+                                        make_pair("buy_price", get<0>(*a.begin())),
+                                        make_pair("sell_price",
+                                                  get<0>(*next(a.begin())) - 1),
+                                        make_pair("tier", (get<4>(*a.begin())))};
+                            }
                         }
-                        }
-
+                    }
                 }
                 auto endtime = high_resolution_clock::now();
                 duration<double, std::milli> totalspeed = endtime - starttime;
