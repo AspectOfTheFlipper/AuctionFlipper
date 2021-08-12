@@ -49,7 +49,7 @@ public:
                               req.remoteIpAddress)) {
                 nlohmann::json js1 = nlohmann::json::object();
                 js1["success"] = true;
-                js1["auctions"] = bin_free;
+                js1["auctions"] = sniper;
                 js1["updated"] = updated.load();
                 auto response = crow::response(200, js1.dump());
                 response.add_header("Content-Type", "application/json");
@@ -65,7 +65,7 @@ public:
                               req.remoteIpAddress)) {
                 nlohmann::json js1 = nlohmann::json::object();
                 js1["success"] = true;
-                js1["auctions"] = bin_free;
+                js1["auctions"] = bin_full;
                 js1["updated"] = updated.load();
                 auto response = crow::response(200, js1.dump());
                 response.add_header("Content-Type", "application/json");
