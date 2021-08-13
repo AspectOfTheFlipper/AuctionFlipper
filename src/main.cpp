@@ -266,7 +266,10 @@ private:
                 lock.unlock();
                 sleep = false;
             }
-            this_thread::sleep_for(chrono::minutes(15));
+            for (int i = 0; i < 30; ++i) {
+                this_thread::sleep_for(chrono::seconds(30));
+                if (!running) break;
+            }
         }
     }
 
