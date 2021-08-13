@@ -150,7 +150,7 @@ private:
     unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
-    atomic<bool> running, active, sleep;
+    atomic<bool> running, active = false, sleep;
     nlohmann::json AveragePrice;
     nlohmann::json sniper, bin_full,
             bin_free, unsortable;
