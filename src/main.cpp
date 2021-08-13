@@ -423,7 +423,8 @@ private:
                         if (AveragePrice[member]["price"].is_null()) {
                             //cout<<"COULD NOT FIND AVERAGE PRICE FOR: "<<member<<"\n";
                             if (get<0>(*(a.begin())) <=
-                                int((get<0>(*(a.begin() + 1)) - margin) * 0.99)) {
+                                int(min(int(get<0>(*(a.begin() + 1)) * 0.9),
+                                        (get<0>(*(a.begin() + 1)) - margin)) * 0.99)) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -456,9 +457,10 @@ private:
                                         make_pair("tier", (get<4>(*a.begin())))};
                             }
                         } else {
+                            int minprice = min(get<0>(*(a.begin() + 1)),
+                                               AveragePrice[member]["price"].get<int>());
                             if (get<0>(*a.begin()) <=
-                                int((min(get<0>(*(a.begin() + 1)),
-                                         AveragePrice[member]["price"].get<int>()) - margin) * 0.99)) {
+                                int(min(minprice - margin, int(minprice * 0.90)) * 0.99)) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -508,7 +510,8 @@ private:
 
                         } else {
                             if (get<0>(*a.begin()) <=
-                                int((AveragePrice[member]["price"].get<int>() - margin) * 0.99)) {
+                                int(min(AveragePrice[member]["price"].get<int>() - margin,
+                                        int(AveragePrice[member]["price"].get<int>() * 0.9)) * 0.99)) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
