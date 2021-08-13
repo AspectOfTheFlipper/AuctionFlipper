@@ -17,6 +17,7 @@
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
 #include <curlpp/Options.hpp>
+#include <curlpp/Multi.hpp>
 #include "json.hpp"
 #include "crow_all.h"
 #include <zlib.h>
@@ -117,6 +118,7 @@ public:
                     "https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
+            getLookup[&getThreaded[page]] = &getMutex[page];
         }
         thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
@@ -147,6 +149,8 @@ private:
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
+    mutex getMutex[200];
+    unordered_map<curlpp::Easy *, mutex *> getLookup;
     unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
@@ -159,6 +163,7 @@ private:
     ostringstream getStream[200];
     int port = 80;
     const int margin = 1000000;
+    curlpp::Multi getMulti;
     map<string, int> tiers{
             {"COMMON",    0},
             {"UNCOMMON",  1},
@@ -279,9 +284,11 @@ private:
         unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
         unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
         set<string> localUniqueIDs;
-        do {
+        getMutex[page].lock();
+        getMutex[page].unlock();
+        while (curlpp::infos::ResponseCode::get(getThreaded[page]) != 200 || getStream[page].str() == "") {
             getThreaded[page].perform();
-        } while (curlpp::infos::ResponseCode::get(getThreaded[page]) != 200 || getStream[page].str() == "");
+        }
         auto downloadtime = high_resolution_clock::now();
         auto getJson = nlohmann::json::parse(getStream[page].str());
         int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();
@@ -396,6 +403,129 @@ private:
         return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
     }
 
+    pair<int, long long> getZero() {
+        ++threads;
+        auto starttime = high_resolution_clock::now();
+        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
+        unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
+        set<string> localUniqueIDs;
+        do {
+            getThreaded[0].perform();
+        } while (curlpp::infos::ResponseCode::get(getThreaded[0]) != 200 || getStream[0].str() == "");
+        auto downloadtime = high_resolution_clock::now();
+        auto getJson = nlohmann::json::parse(getStream[0].str());
+        int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();
+        if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
+            for (int i = 0; i < size; ++i) {
+                //                cout<<"Analysing "<<i<<" on 0 "<<0<<'\n';
+                if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
+                    auto val = Cache.find(getJson["auctions"][i]["uuid"].get<string>());
+                    if (val != Cache.end()) {
+                        if (prices.find(val->second.first) != prices.end()) {
+                            prices.find(val->second.first)->
+                                    second.push_back(val->second.second);
+                        } else {
+                            prices.insert({val->second.first, {val->second.second}});
+                            localUniqueIDs.insert(val->second.first);
+                        }
+                    } else {
+                        auto c = cppcodec::base64_rfc4648::decode(
+                                getJson["auctions"][i]["item_bytes"].get<string>());
+                        string d(c.begin(), c.end());
+
+                        nbt::NBT nbtdata;
+                        istringstream str(d);
+                        zstr::istream decoded(str);
+                        nbtdata.decode(decoded);
+                        string ID;
+                        if (nbt::get_list<nbt::TagCompound>
+                                    (nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
+                                    .find("enchantments") != nbt::get_list<nbt::TagCompound>
+                                    (nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end()
+                            && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                       .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
+                            auto enchantments = nbt::get_list<nbt::TagCompound>
+                                    (nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagCompound>("enchantments");
+                            ID = enchantments.base.begin()->first + ";" +
+                                 to_string(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
+                            for (auto &f : ID) f = toupper(f);
+                        } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                           .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                           .at<nbt::TagString>("id") == "PET") {
+                            auto petInfo = nlohmann::json::parse(
+                                    nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                            .at<nbt::TagString>("petInfo"));
+                            ID = petInfo["type"].get<string>() + ";" + to_string(to_tier(
+                                    petInfo["tier"].get<string>()))
+                                 + (isLevel100(to_tier(petInfo["tier"]),
+                                               petInfo["exp"]) ? ";100" : "");
+
+                        } else if (nbt::get_list<nbt::TagCompound>
+                                           (nbtdata.at<nbt::TagList>(
+                                                   "i"))[0]
+                                           .at<nbt::TagCompound>(
+                                                   "tag").at<nbt::TagCompound>("ExtraAttributes")
+                                           .at<nbt::TagString>(
+                                                   "id").length() > 8
+                                   && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                              .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                              .at<nbt::TagString>("id").substr(0, 8) == "STARRED_") {
+                            ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagString>("id").substr(8);
+                        }
+                        {
+                            ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                    .at<nbt::TagString>("id");
+                        }
+                        if (prices.find(ID) != prices.end()) {
+                            prices.find(ID)->second.push_back(tuple<int, string, long long, string, string>(
+                                    getJson["auctions"][i]["starting_bid"],
+                                    getJson["auctions"][i]["uuid"],
+                                    getJson["auctions"][i]["start"],
+                                    getJson["auctions"][i]["item_name"],
+                                    getJson["auctions"][i]["tier"]));
+                        } else {
+                            prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                    getJson["auctions"][i]["starting_bid"],
+                                    getJson["auctions"][i]["uuid"],
+                                    getJson["auctions"][i]["start"],
+                                    getJson["auctions"][i]["item_name"],
+                                    getJson["auctions"][i]["tier"])}});
+                            localUniqueIDs.insert(ID);
+                        }
+                        local_cache.insert({getJson["auctions"][i]["uuid"], {
+                                ID, tuple<int, string, long long, string, string>(
+                                        getJson["auctions"][i]["starting_bid"],
+                                        getJson["auctions"][i]["uuid"],
+                                        getJson["auctions"][i]["start"],
+                                        getJson["auctions"][i]["item_name"],
+                                        getJson["auctions"][i]["tier"])}});
+                    }
+                }
+
+            }
+            writing.lock();
+            UniqueIDs.merge(localUniqueIDs);
+            for (auto &i : prices) {
+                auto &C = GlobalPrices[i.first];
+                C.insert(C.end(), i.second.begin(), i.second.end());
+            }
+            Cache.merge(local_cache);
+            writing.unlock();
+            getStream[0].str("");
+        }
+        --threads;
+        return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
+    }
+
     bool authenticated(string const &UUID, string const &key, string const &IP) {
         ofstream log;
         log.open("log.txt", ofstream::out | ofstream::app);
@@ -415,7 +545,7 @@ private:
             GlobalPrices.clear();
             vector<std::thread> children;
             cout << "Beginning Cycle\n";
-            pair<int, long long> information = getPage(0);
+            pair<int, long long> information = getZero();
             children.reserve(information.first);
             if (information.second == updated) {
                 cout << "HyAPI has not updated yet. Sleeping Thread.\n";
@@ -428,10 +558,76 @@ private:
                 bin_free.clear();
                 unsortable.clear();
                 updated = information.second;
+                int nbLeft;
                 long long lastUpdate = information.second - 60000;
                 for (int i = 1; i < information.first; ++i) {
 //                      getPage(i);
+                    getMulti.add(&getThreaded[i]);
+                    getMutex[i].lock();
                     children.emplace_back([this](int i) { getPage(i); }, i);
+                }
+                while (!getMulti.perform(&nbLeft)) {};
+
+                while (nbLeft) {
+                    struct timeval timeout;
+                    int rc; /* select() return code */
+
+                    fd_set fdread;
+                    fd_set fdwrite;
+                    fd_set fdexcep;
+                    int maxfd;
+
+                    FD_ZERO(&fdread);
+                    FD_ZERO(&fdwrite);
+                    FD_ZERO(&fdexcep);
+
+                    /* set a suitable timeout to play around with */
+                    timeout.tv_sec = 3;
+                    timeout.tv_usec = 0;
+
+                    /* get file descriptors from the transfers */
+                    getMulti.fdset(&fdread, &fdwrite, &fdexcep, &maxfd);
+
+                    rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
+                    switch (rc) {
+                        case -1:
+                            /* select error */
+                            nbLeft = 0;
+                            printf("select() returns error, this is badness\n");
+                            break;
+                        case 0:
+                            /* timeout, do something else */
+                            break;
+                        default:
+                            /* one or more of curl's file descriptors say there's data to read
+                               or write */
+                            while (!getMulti.perform(&nbLeft)) {};
+                            break;
+                    }
+                }
+
+                std::cout << "NB lefts: " << nbLeft << std::endl;
+
+                /* See how the transfers went */
+                /*
+                   Multi::info returns a list of:
+                   std::pair< curlpp::Easy, curlpp::Multi::Info >
+                */
+                curlpp::Multi::Msgs msgs = getMulti.info();
+                for (auto pos = msgs.begin();
+                     pos != msgs.end();
+                     pos++) {
+                    if (pos->second.msg == CURLMSG_DONE) {
+                        getMulti.remove(pos->first);
+                        getLookup[(Easy *) (pos->first)]->unlock();
+//                        /* Find out which handle this message is about */
+//                        if(pos->first == &request1) {
+//                            printf("First request completed with status %d\n", pos->second.code);
+//                        }
+//                        else if(pos->first == &request2) {
+//                            printf("Second request completed with status %d\n", pos->second.code);
+//                        }
+                    }
                 }
                 for (auto &child : children)
                     child.join();//This sleeps until all fetching threads are done.
