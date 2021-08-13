@@ -39,7 +39,11 @@ class Server {
 public:
     //Functions
     void initialize() {
-        CROW_ROUTE(CrowServer, "/")([] {
+        CROW_ROUTE(CrowServer, "/")([this]() {
+            active = true;
+            if (sleep) {
+                return "Sleeping";
+            }
             return "Healthy";
         });
         CROW_ROUTE(CrowServer, "/sniper")([this](const crow::request &req) {
@@ -47,6 +51,7 @@ public:
                 authenticated(string(req.url_params.get("uuid")),
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
+                active = true;
                 nlohmann::json js1 = nlohmann::json::object();
                 js1["success"] = true;
                 js1["auctions"] = sniper;
@@ -63,6 +68,7 @@ public:
                 authenticated(string(req.url_params.get("uuid")),
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
+                active = true;
                 nlohmann::json js1 = nlohmann::json::object();
                 js1["success"] = true;
                 js1["auctions"] = bin_full;
@@ -75,6 +81,7 @@ public:
             }
         });
         CROW_ROUTE(CrowServer, "/bin_free")([this] {
+            active = true;
             nlohmann::json js1 = nlohmann::json::object();
             js1["success"] = true;
             js1["auctions"] = bin_free;
@@ -88,6 +95,7 @@ public:
                 authenticated(string(req.url_params.get("uuid")),
                               string(req.url_params.get("key")),
                               req.remoteIpAddress)) {
+                active = true;
                 nlohmann::json js1 = nlohmann::json::object();
                 js1["success"] = true;
                 js1["auctions"] = unsortable;
@@ -105,7 +113,8 @@ public:
     void start() {
         running = true;
         for (int page = 0; page < 200; ++page) {
-            getThreaded[page].setOpt(options::Url("https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
+            getThreaded[page].setOpt(options::Url(
+                    "https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
@@ -113,17 +122,19 @@ public:
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
+        thread Sleep([this]() { doSleep(); });
         CrowServer.port(port).multithreaded().run();
         std::lock_guard<std::mutex> clock(exit);
         running = false;
         exitc.notify_all();
         AuthApi.join();
+        Sleep.join();
         cout << "AuthAPI exited." << endl;
         AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
-
+        ClearCache.join();
         //Server.port(port).multithreaded().run();
     }
 
@@ -139,7 +150,7 @@ private:
     unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
-    atomic<bool> running;
+    atomic<bool> running, active, sleep;
     nlohmann::json AveragePrice;
     nlohmann::json sniper, bin_full,
             bin_free, unsortable;
@@ -218,7 +229,7 @@ private:
             lock.lock();
             ostringstream getStreams;
             getStreams << options::Url("localhost:1926/api/auction_averages");
-            AveragePrice.parse(getStreams.str());
+            AveragePrice = nlohmann::json::parse(getStreams.str());
             lock.unlock();
             for (int i = 0; i < 720; ++i) {
                 if (!running) return; else this_thread::sleep_for(chrono::seconds(15));
@@ -241,6 +252,21 @@ private:
             auto whitelist = nlohmann::json::parse(WhitelistJson);
             Auth = whitelist.get<unordered_map<string, string >>();
             this_thread::sleep_for(chrono::seconds(15));
+        }
+    }
+
+    void doSleep() {
+        while (running) {
+            if (active) {
+                active = false;
+            } else {
+                sleep = true;
+                lock.lock();
+                while (!active) this_thread::sleep_for(chrono::seconds(5));
+                lock.unlock();
+                sleep = false;
+            }
+            this_thread::sleep_for(chrono::minutes(15));
         }
     }
 
@@ -284,10 +310,10 @@ private:
                                     .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
                                     .find("enchantments") != nbt::get_list<nbt::TagCompound>
                                     (nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end() &&
-                            nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                    .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
+                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end()
+                            && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                       .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
                             auto enchantments = nbt::get_list<nbt::TagCompound>
                                     (nbtdata.at<nbt::TagList>("i"))[0]
                                     .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
@@ -302,20 +328,18 @@ private:
                                     nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                             .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                             .at<nbt::TagString>("petInfo"));
-                            ID = petInfo["type"].get<string>() + ";" + to_string(to_tier
-                                                                                         (petInfo["tier"].get<string>()))
+                            ID = petInfo["type"].get<string>() + ";" + to_string(to_tier(
+                                    petInfo["tier"].get<string>()))
                                  + (isLevel100(to_tier(petInfo["tier"]),
                                                petInfo["exp"]) ? ";100" : "");
 
                         } else if (nbt::get_list<nbt::TagCompound>
-                                                                                                                                                                                                                                                                            (nbtdata.at<nbt::TagList>(
-                                                                                                                                                                                                                                                                                    "i"))[0]
-                                                                                                                                                                                                                                                                            .at<nbt::TagCompound>(
-                                                                                                                                                                                                                                                                                    "tag").at<nbt::TagCompound>(
-                                        "ExtraAttributes")
-                                                                                                                                                                                                                                                                            .at<nbt::TagString>(
-                                                                                                                                                                                                                                                                                    "id").length() >
-                                   8
+                                           (nbtdata.at<nbt::TagList>(
+                                                   "i"))[0]
+                                           .at<nbt::TagCompound>(
+                                                   "tag").at<nbt::TagCompound>("ExtraAttributes")
+                                           .at<nbt::TagString>(
+                                                   "id").length() > 8
                                    && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                               .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                               .at<nbt::TagString>("id").substr(0, 8) == "STARRED_") {
