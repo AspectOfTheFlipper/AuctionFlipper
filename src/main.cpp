@@ -427,7 +427,7 @@ private:
                 bin_full.clear();
                 bin_free.clear();
                 unsortable.clear();
-                updated = information.second;
+
                 long long lastUpdate = information.second - 60000;
                 for (int i = 1; i < information.first; ++i) {
 //                      getPage(i);
@@ -579,6 +579,7 @@ private:
                 duration<double, std::milli> processingspeed = endtime - downloadtime;
                 cout << "Processing speed: " << processingspeed.count()
                      << "ms, Total speed: " << totalspeed.count() << "ms" << endl;
+                updated = information.second;
             }
             lock.unlock();
             this_thread::sleep_until(
