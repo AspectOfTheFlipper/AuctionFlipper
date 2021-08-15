@@ -339,18 +339,19 @@ private:
                         } else if (nbt::get_list<nbt::TagCompound>
                                            (nbtdata.at<nbt::TagList>(
                                                    "i"))[0]
-                                           .at<nbt::TagCompound>(
-                                                   "tag").at<nbt::TagCompound>("ExtraAttributes")
-                                           .at<nbt::TagString>(
-                                                   "id").length() > 8
+                                                                                                                                                                                                                                                                               .at<nbt::TagCompound>(
+                                                                                                                                                                                                                                                                                       "tag").at<nbt::TagCompound>(
+                                        "ExtraAttributes")
+                                                                                                                                                                                                                                                                               .at<nbt::TagString>(
+                                                                                                                                                                                                                                                                                       "id").length() >
+                                   8
                                    && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                               .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                               .at<nbt::TagString>("id").substr(0, 8) == "STARRED_") {
                             ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                     .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                     .at<nbt::TagString>("id").substr(8);
-                        }
-                        {
+                        } else {
                             ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                     .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                     .at<nbt::TagString>("id");
