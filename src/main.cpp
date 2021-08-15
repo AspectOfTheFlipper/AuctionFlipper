@@ -169,7 +169,7 @@ private:
     };
 
     //Functions
-    static bool const isLevel100(int tier, int xp) {
+    static bool isLevel100(int tier, int xp) {
         switch (tier) {
             case 0:
                 return xp >= 5624785;
@@ -184,7 +184,7 @@ private:
         }
     }
 
-    std::string to_roman_numerals(const int &number) {
+    static std::string to_roman_numerals(const int &number) {
         switch (number) {
             case 1:
                 return "I";
@@ -220,7 +220,7 @@ private:
         }
     }
 
-    int const to_tier(string tier) {
+    int to_tier(const string &tier) {
         return tiers[tier];
     }
 
@@ -357,12 +357,12 @@ private:
                                     .at<nbt::TagString>("id");
                         }
                         if (prices.find(ID) != prices.end()) {
-                            prices.find(ID)->second.push_back(tuple<int, string, long long, string, string>(
+                            prices.find(ID)->second.emplace_back(
                                     getJson["auctions"][i]["starting_bid"],
                                     getJson["auctions"][i]["uuid"],
                                     getJson["auctions"][i]["start"],
                                     getJson["auctions"][i]["item_name"],
-                                    getJson["auctions"][i]["tier"]));
+                                    getJson["auctions"][i]["tier"]);
                         } else {
                             prices.insert({ID, {tuple<int, string, long long, string, string>(
                                     getJson["auctions"][i]["starting_bid"],
@@ -394,7 +394,7 @@ private:
             getStream[page].str("");
         }
         --threads;
-        return pair<int, long long>(getJson["totalPages"], getJson["lastUpdated"]);
+        return {getJson["totalPages"], getJson["lastUpdated"]};
     }
 
     bool authenticated(string const &UUID, string const &key, string const &IP) {
