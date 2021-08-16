@@ -451,8 +451,8 @@ private:
                         if (AveragePrice[member]["price"].is_null()) {
                             //cout<<"COULD NOT FIND AVERAGE PRICE FOR: "<<member<<"\n";
                             if (get<0>(*(a.begin())) <=
-                                int(min(int(get<0>(*(a.begin() + 1)) * 0.9),
-                                        (get<0>(*(a.begin() + 1)) - margin)) * 0.99)) {
+                                int(min(get<0>(*(a.begin() + 1)) / 10 * 9,
+                                        (get<0>(*(a.begin() + 1)) - margin)))) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -475,7 +475,7 @@ private:
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
                             } else if (get<0>(*a.begin()) <=
-                                       int((get<0>(*(a.begin() + 1))) * 0.99)) {
+                                       int((get<0>(*(a.begin() + 1))) / 100 * 99)) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
                                         make_pair("item_name", (get<3>(*a.begin()))),
@@ -488,7 +488,7 @@ private:
                             int minprice = min(get<0>(*(a.begin() + 1)),
                                                AveragePrice[member]["price"].get<int>());
                             if (get<0>(*a.begin()) <=
-                                int(min(minprice - margin, int(minprice * 0.90)) * 0.99)) {
+                                int(min(minprice - margin, minprice / 10 * 9))) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -516,7 +516,7 @@ private:
                                 }
                             } else if (get<0>(*a.begin()) <
                                        int((min(get<0>(*(a.begin() + 1)),
-                                                AveragePrice[member]["price"].get<int>())) * 0.99)) {
+                                                AveragePrice[member]["price"].get<int>())) / 100 * 99)) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
                                         make_pair("item_name", (get<3>(*a.begin()))),
@@ -539,7 +539,7 @@ private:
                         } else {
                             if (get<0>(*a.begin()) <=
                                 int(min(AveragePrice[member]["price"].get<int>() - margin,
-                                        int(AveragePrice[member]["price"].get<int>() * 0.9)) * 0.99)) {
+                                        int(AveragePrice[member]["price"].get<int>() / 10 * 9)))) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -562,7 +562,7 @@ private:
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
                             } else if (get<0>(*a.begin()) <
-                                       int(AveragePrice[member]["price"].get<int>() * 0.99)) {
+                                       int(AveragePrice[member]["price"].get<int>() / 100 * 99)) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
                                         make_pair("item_name",
