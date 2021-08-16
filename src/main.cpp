@@ -119,43 +119,43 @@ public:
             getThreaded[page].setOpt(options::TcpNoDelay(true));
             switch (page % 12) {
                 case 1:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://104.168.29.253:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://104.168.29.253:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 2:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.120:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.120:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 3:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.153:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.153:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 4:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.55:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.55:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 5:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://172.245.193.224:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://172.245.193.224:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 6:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.129:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.129:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 7:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.248:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.248:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 8:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.55:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.55:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 9:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://191.102.164.102:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://191.102.164.102:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 case 10:
-                    getThreaded[page].setOpt(options::Proxy("socks5h://191.102.164.4:36505"));
+                    getThreaded[page].setOpt(options::Proxy("socks5h://191.102.164.4:4444"));
                     getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
                     break;
                 default:
