@@ -117,8 +117,52 @@ public:
                     "https://api.hypixel.net/skyblock/auctions?page=" + to_string(page)));
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
+            switch (page % 12) {
+                case 1:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://104.168.29.253:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 2:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.120:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 3:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.153:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 4:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://107.173.68.55:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 5:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://172.245.193.224:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 6:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.129:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 7:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.248:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 8:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://173.234.48.55:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 9:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://191.102.164.102:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                case 10:
+                    getThreaded[page].setOpt(options::Proxy("socks5h://191.102.164.4:36505"));
+                    getThreaded[page].setOpt(options::ProxyUserPwd("axfibhrt:c526b452b3"));
+                    break;
+                default:
+                    break;
+            }
         }
-        thread AvgApi([this]() { get3DayAvg(); });
+//        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
@@ -130,7 +174,7 @@ public:
         AuthApi.join();
         Sleep.join();
         cout << "AuthAPI exited." << endl;
-        AvgApi.join();
+//        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
@@ -147,7 +191,7 @@ private:
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
-    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
+    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices, GlobalPricesCache;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
     atomic<bool> running, active = false, sleep;
@@ -157,7 +201,7 @@ private:
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
     ostringstream getStream[200];
-    int port = 80;
+    int port = 8080;
     const int margin = 1000000;
     map<string, int> tiers{
             {"COMMON",    0},
@@ -220,7 +264,7 @@ private:
         }
     }
 
-    int to_tier(const string &tier) {
+    inline int to_tier(const string &tier) {
         return tiers[tier];
     }
 
@@ -581,6 +625,7 @@ private:
                 cout << "Processing speed: " << processingspeed.count()
                      << "ms, Total speed: " << totalspeed.count() << "ms" << endl;
                 updated = information.second;
+                GlobalPricesCache = GlobalPrices;
             }
             lock.unlock();
             this_thread::sleep_until(
