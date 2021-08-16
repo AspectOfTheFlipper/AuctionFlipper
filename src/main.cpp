@@ -299,6 +299,7 @@ private:
                             localUniqueIDs.insert(val->second.first);
                         }
                     } else {
+                        cout << "New entry on page: " << page << endl;
                         auto c = cppcodec::base64_rfc4648::decode(
                                 getJson["auctions"][i]["item_bytes"].get<string>());
                         string d(c.begin(), c.end());
