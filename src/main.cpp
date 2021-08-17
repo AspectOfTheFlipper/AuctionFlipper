@@ -421,7 +421,7 @@ private:
             children.reserve(information.first);
             if (information.second == updated) {
                 cout << "HyAPI has not updated yet. Sleeping Thread.\n";
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 lock.unlock();
                 continue;
             } else {
@@ -585,7 +585,7 @@ private:
             }
             lock.unlock();
             this_thread::sleep_until(
-                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 64000}));
+                    std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 69500}));
         }
     }
 
