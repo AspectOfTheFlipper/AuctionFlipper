@@ -154,8 +154,8 @@ private:
 //    nlohmann::json AveragePrice;
     simdjson::ondemand::parser getParser[200];
     unordered_map<string, int> AveragePrice;
-    nlohmann::json sniper, bin_full,
-            bin_free, unsortable;
+    nlohmann::json sniper = nlohmann::json::array(), bin_full = nlohmann::json::array(),
+            bin_free = nlohmann::json::array(), unsortable = nlohmann::json::array();
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
     ostringstream getStream[200];
@@ -463,7 +463,7 @@ private:
             for (auto i : auctions) {
                 ++size;
 //                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
-                if (!i["bin"].is_null()) {
+                if (!i["bin"].is_null() && i["bin"].get_bool()) {
                     auto val = Cache.find(string(i["uuid"].get_string().value()));
                     if (val != Cache.end()) {
                         if (prices.find(val->second.first) != prices.end()) {
