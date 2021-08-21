@@ -463,96 +463,100 @@ private:
             for (auto i : auctions) {
                 ++size;
 //                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
-                if (!i["bin"].is_null() && i["bin"].get_bool()) {
-                    auto val = Cache.find(string(i["uuid"].get_string().value()));
-                    if (val != Cache.end()) {
-                        if (prices.find(val->second.first) != prices.end()) {
-                            prices.find(val->second.first)->
-                                    second.push_back(val->second.second);
+                try {
+                    if (i["bin"].get_bool()) {
+                        auto val = Cache.find(string(i["uuid"].get_string().value()));
+                        if (val != Cache.end()) {
+                            if (prices.find(val->second.first) != prices.end()) {
+                                prices.find(val->second.first)->
+                                        second.push_back(val->second.second);
+                            } else {
+                                prices.insert({val->second.first, {val->second.second}});
+                                localUniqueIDs.insert(val->second.first);
+                            }
                         } else {
-                            prices.insert({val->second.first, {val->second.second}});
-                            localUniqueIDs.insert(val->second.first);
-                        }
-                    } else {
-//                        cout << "New entry on page: " << page << endl;
-                        auto c = cppcodec::base64_rfc4648::decode(
-                                string(i["item_bytes"].get_string().value()));
-                        string d(c.begin(), c.end());
+                            //                        cout << "New entry on page: " << page << endl;
+                            auto c = cppcodec::base64_rfc4648::decode(
+                                    string(i["item_bytes"].get_string().value()));
+                            string d(c.begin(), c.end());
 
-                        nbt::NBT nbtdata;
-                        istringstream str(d);
-                        zstr::istream decoded(str);
-                        nbtdata.decode(decoded);
-                        string ID;
-                        int value = 0;
-//                        cout<<nbtdata<<endl;
-                        if (nbt::get_list<nbt::TagCompound>
-                                    (nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
-                                    .find("enchantments") != nbt::get_list<nbt::TagCompound>
-                                    (nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end()
-                            && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                       .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                       .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
-                            auto enchantments = nbt::get_list<nbt::TagCompound>
-                                    (nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                    .at<nbt::TagCompound>("enchantments");
-                            ID = enchantments.base.begin()->first + ";" +
-                                 to_string(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
-                            for (auto &f : ID) f = toupper(f);
-                        } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                            nbt::NBT nbtdata;
+                            istringstream str(d);
+                            zstr::istream decoded(str);
+                            nbtdata.decode(decoded);
+                            string ID;
+                            int value = 0;
+                            //                        cout<<nbtdata<<endl;
+                            if (nbt::get_list<nbt::TagCompound>
+                                        (nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
+                                        .find("enchantments") != nbt::get_list<nbt::TagCompound>
+                                        (nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base.end()
+                                && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                           .at<nbt::TagString>("id") == "PET") {
-                            auto petInfo = nlohmann::json::parse(
-                                    nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                            .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                            .at<nbt::TagString>("petInfo"));
-                            ID = petInfo["type"].get<string>() + ";" + to_string(to_tier(
-                                    petInfo["tier"].get<string>()))
-                                 + (isLevel100(to_tier(petInfo["tier"]),
-                                               petInfo["exp"]) ? ";100" : "");
+                                           .at<nbt::TagString>("id") == "ENCHANTED_BOOK") {
+                                auto enchantments = nbt::get_list<nbt::TagCompound>
+                                        (nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                        .at<nbt::TagCompound>("enchantments");
+                                ID = enchantments.base.begin()->first + ";" +
+                                     to_string(enchantments.at<nbt::TagInt>(enchantments.base.begin()->first));
+                                for (auto &f : ID) f = toupper(f);
+                            } else if (nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                               .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                               .at<nbt::TagString>("id") == "PET") {
+                                auto petInfo = nlohmann::json::parse(
+                                        nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                                .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                                .at<nbt::TagString>("petInfo"));
+                                ID = petInfo["type"].get<string>() + ";" + to_string(to_tier(
+                                        petInfo["tier"].get<string>()))
+                                     + (isLevel100(to_tier(petInfo["tier"]),
+                                                   petInfo["exp"]) ? ";100" : "");
 
-                        } else if (nbt::get_list<nbt::TagCompound>
-                                           (nbtdata.at<nbt::TagList>(
-                                                   "i"))[0].at<nbt::TagCompound>("tag").at<nbt::TagCompound>(
-                                "ExtraAttributes").at<nbt::TagString>("id").length() > 8
-                                   && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                              .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                              .at<nbt::TagString>("id").substr(0, 8) == "STARRED_") {
-                            ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                    .at<nbt::TagString>("id").substr(8);
-                        } else {
-                            ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
-                                    .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
-                                    .at<nbt::TagString>("id");
-                        }
-                        if (prices.find(ID) != prices.end()) {
-                            prices.find(ID)->second.emplace_back(
-                                    i["starting_bid"].get_int64(),
-                                    string(i["uuid"].get_string().value()),
-                                    i["start"].get_int64(),
-                                    string(i["item_name"].get_string().value()),
-                                    string(i["tier"].get_string().value()));
-                        } else {
-                            prices.insert({ID, {tuple<int, string, long long, string, string>(
-                                    i["starting_bid"].get_int64(),
-                                    string(i["uuid"].get_string().value()),
-                                    i["start"].get_int64(),
-                                    string(i["item_name"].get_string().value()),
-                                    string(i["tier"].get_string().value()))}});
-                            localUniqueIDs.insert(ID);
-                        }
-                        local_cache.insert({string(i["uuid"].get_string().value()), {
-                                ID, tuple<int, string, long long, string, string>(
-                                        int(i["starting_bid"].get_int64()),
+                            } else if (nbt::get_list<nbt::TagCompound>
+                                               (nbtdata.at<nbt::TagList>(
+                                                       "i"))[0].at<nbt::TagCompound>("tag").at<nbt::TagCompound>(
+                                    "ExtraAttributes").at<nbt::TagString>("id").length() > 8
+                                       && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                                  .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                                  .at<nbt::TagString>("id").substr(0, 8) == "STARRED_") {
+                                ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                        .at<nbt::TagString>("id").substr(8);
+                            } else {
+                                ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
+                                        .at<nbt::TagString>("id");
+                            }
+                            if (prices.find(ID) != prices.end()) {
+                                prices.find(ID)->second.emplace_back(
+                                        i["starting_bid"].get_int64(),
                                         string(i["uuid"].get_string().value()),
-                                        (long long) (i["start"].get_int64()),
+                                        i["start"].get_int64(),
+                                        string(i["item_name"].get_string().value()),
+                                        string(i["tier"].get_string().value()));
+                            } else {
+                                prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                        i["starting_bid"].get_int64(),
+                                        string(i["uuid"].get_string().value()),
+                                        i["start"].get_int64(),
                                         string(i["item_name"].get_string().value()),
                                         string(i["tier"].get_string().value()))}});
+                                localUniqueIDs.insert(ID);
+                            }
+                            local_cache.insert({string(i["uuid"].get_string().value()), {
+                                    ID, tuple<int, string, long long, string, string>(
+                                            int(i["starting_bid"].get_int64()),
+                                            string(i["uuid"].get_string().value()),
+                                            (long long) (i["start"].get_int64()),
+                                            string(i["item_name"].get_string().value()),
+                                            string(i["tier"].get_string().value()))}});
+                        }
                     }
+                } catch (...) {
+
                 }
 
             }
