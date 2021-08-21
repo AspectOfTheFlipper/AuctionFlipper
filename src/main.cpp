@@ -12,7 +12,6 @@
 //#include <pistache/peer.h>
 //#include <pistache/router.h>
 #define cURL::CURLOPT_TCP_NO_DELAY
-
 #include <curlpp/Infos.hpp>
 #include <curlpp/cURLpp.hpp>
 #include <curlpp/Easy.hpp>
@@ -26,6 +25,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <fstream>
+#include <simdjson.h>
 //using namespace Pistache;
 using namespace cURLpp;
 using namespace std;
@@ -151,12 +151,203 @@ private:
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
     atomic<bool> running, active = false, sleep;
-    nlohmann::json AveragePrice;
+//    nlohmann::json AveragePrice;
+    simdjson::ondemand::parser getParser[200];
+    unordered_map<string, int> AveragePrice;
     nlohmann::json sniper, bin_full,
             bin_free, unsortable;
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
     ostringstream getStream[200];
+    unordered_map<string, int> Enchant_Prices = {
+            {"TELEKINESIS;1",           100},
+            {"SHARPNESS;1",             100},
+            {"SHARPNESS;2",             200},
+            {"SHARPNESS;3",             300},
+            {"SHARPNESS;4",             500},
+            {"SHARPNESS;5",             1000},
+            {"SMITE;1",                 100},
+            {"SMITE;2",                 200},
+            {"SMITE;3",                 300},
+            {"SMITE;4",                 500},
+            {"SMITE;5",                 1000},
+            {"BANE_OF_ARTHROPODS;1",    100},
+            {"BANE_OF_ARTHROPODS;2",    200},
+            {"BANE_OF_ARTHROPODS;3",    300},
+            {"BANE_OF_ARTHROPODS;4",    500},
+            {"BANE_OF_ARTHROPODS;5",    1000},
+            {"KNOCKBACK;1",             0},
+            {"KNOCKBACK;2",             0},
+            {"FIRE_ASPECT;1",           100},
+            {"FIRE_ASPECT;2",           200},
+            {"EXPERIENCE;1",            100},
+            {"EXPERIENCE;2",            200},
+            {"EXPERIENCE;3",            1000},
+            {"LOOTING;1",               100},
+            {"LOOTING;2",               200},
+            {"LOOTING;3",               1000},
+            {"SCAVENGER;1",             100},
+            {"SCAVENGER;2",             200},
+            {"SCAVENGER;3",             1000},
+            {"LUCK;1",                  100},
+            {"LUCK;2",                  200},
+            {"LUCK;3",                  300},
+            {"LUCK;4",                  500},
+            {"LUCK;5",                  1000},
+            {"CUBISM;1",                100},
+            {"CUBISM;2",                200},
+            {"CUBISM;3",                300},
+            {"CUBISM;4",                500},
+            {"CUBISM;5",                1000},
+            {"CLEAVE;1",                100},
+            {"CLEAVE;2",                200},
+            {"CLEAVE;3",                300},
+            {"CLEAVE;4",                500},
+            {"CLEAVE;5",                1000},
+            {"LIFE_STEAL;1",            100},
+            {"LIFE_STEAL;2",            200},
+            {"LIFE_STEAL;3",            100},
+            {"GIANT_KILLER;1",          100},
+            {"GIANT_KILLER;2",          200},
+            {"GIANT_KILLER;3",          300},
+            {"GIANT_KILLER;4",          500},
+            {"GIANT_KILLER;5",          1000},
+            {"CRITICAL;1",              100},
+            {"CRITICAL;2",              200},
+            {"CRITICAL;3",              300},
+            {"CRITICAL;4",              500},
+            {"CRITICAL;5",              1000},
+            {"FIRST_STRIKE;1",          500},
+            {"FIRST_STRIKE;2",          1000},
+            {"FIRST_STRIKE;3",          3000},
+            {"FIRST_STRIKE;4",          10000},
+            {"ENDER_SLAYER;1",          100},
+            {"ENDER_SLAYER;2",          200},
+            {"ENDER_SLAYER;3",          300},
+            {"ENDER_SLAYER;4",          500},
+            {"ENDER_SLAYER;5",          1000},
+            {"IMPALING;1",              1000},
+            {"IMPALING;2",              2000},
+            {"IMPALING;3",              5000},
+            {"EXECUTE;1",               100},
+            {"EXECUTE;2",               200},
+            {"EXECUTE;3",               300},
+            {"EXECUTE;4",               500},
+            {"EXECUTE;5",               1000},
+            {"THUNDERLORD;1",           100},
+            {"THUNDERLORD;2",           200},
+            {"THUNDERLORD;3",           300},
+            {"THUNDERLORD;4",           500},
+            {"THUNDERLORD;5",           1000},
+            {"LETHALITY;1",             100},
+            {"LETHALITY;2",             200},
+            {"LETHALITY;3",             300},
+            {"LETHALITY;4",             500},
+            {"LETHALITY;5",             1000},
+            {"SYPHON;1",                100},
+            {"SYPHON;2",                200},
+            {"SYPHON;3",                300},
+            {"VAMPIRISM;1",             100},
+            {"VAMPIRISM;2",             200},
+            {"VAMPIRISM;3",             300},
+            {"VAMPIRISM;4",             500},
+            {"VAMPIRISM;5",             1000},
+            {"VENOMOUS;1",              100},
+            {"VENOMOUS;2",              200},
+            {"VENOMOUS;3",              300},
+            {"VENOMOUS;4",              500},
+            {"VENOMOUS;5",              1000},
+            {"TRIPLE_STRIKE;1",         100},
+            {"TRIPLE_STRIKE;2",         200},
+            {"TRIPLE_STRIKE;3",         300},
+            {"TRIPLE_STRIKE;4",         500},
+            {"THUNDERBOLT;1",           100},
+            {"THUNDERBOLT;2",           200},
+            {"THUNDERBOLT;3",           300},
+            {"THUNDERBOLT;4",           500},
+            {"THUNDERBOLT;5",           1000},
+            {"PROSECUTE;1",             100},
+            {"PROSECUTE;2",             200},
+            {"PROSECUTE;3",             300},
+            {"PROSECUTE;4",             500},
+            {"PROSECUTE;5",             1000},
+            {"TITAN_KILLER;1",          100},
+            {"TITAN_KILLER;2",          200},
+            {"TITAN_KILLER;3",          300},
+            {"TITAN_KILLER;4",          500},
+            {"TITAN_KILLER;5",          1000},
+            {"PROJECTILE_PROTECTION;1", 100},
+            {"PROJECTILE_PROTECTION;2", 200},
+            {"PROJECTILE_PROTECTION;3", 300},
+            {"PROJECTILE_PROTECTION;4", 500},
+            {"PROJECTILE_PROTECTION;5", 1000},
+            {"PROTECTION;1",            100},
+            {"PROTECTION;2",            200},
+            {"PROTECTION;3",            300},
+            {"PROTECTION;4",            500},
+            {"PROTECTION;5",            1000},
+            {"BLAST_PROTECTION;1",      100},
+            {"BLAST_PROTECTION;2",      200},
+            {"BLAST_PROTECTION;3",      300},
+            {"BLAST_PROTECTION;4",      500},
+            {"BLAST_PROTECTION;5",      1000},
+            {"FIRE_PROTECTION;1",       100},
+            {"FIRE_PROTECTION;2",       200},
+            {"FIRE_PROTECTION;3",       300},
+            {"FIRE_PROTECTION;4",       500},
+            {"FIRE_PROTECTION;5",       1000},
+            {"RESPIRATION;1",           100},
+            {"RESPIRATION;2",           200},
+            {"RESPIRATION;3",           300},
+            {"AQUA_AFFINITY;1",         100},
+            {"THORNS;1",                100},
+            {"THORNS;2",                200},
+            {"THORNS;3",                300},
+            {"GROWTH;1",                100},
+            {"GROWTH;2",                200},
+            {"GROWTH;3",                300},
+            {"GROWTH;4",                500},
+            {"GROWTH;5",                1000},
+            {"EFFICIENCY;1",            100},
+            {"EFFICIENCY;2",            200},
+            {"EFFICIENCY;3",            300},
+            {"EFFICIENCY;4",            500},
+            {"EFFICIENCY;5",            1000},
+            {"EFFICIENCY;6",            0},
+            {"SMELTING_TOUCH;1",        100},
+            {"SILK_TOUCH;1",            100},
+            {"POWER;1",                 100},
+            {"POWER;2",                 200},
+            {"POWER;3",                 300},
+            {"POWER;4",                 500},
+            {"POWER;5",                 1000},
+            {"PUNCH;1",                 100},
+            {"PUNCH;2",                 200},
+            {"FLAME;1",                 100},
+            {"INFINITE_QUIVER;1",       100},
+            {"INFINITE_QUIVER;2",       200},
+            {"INFINITE_QUIVER;3",       300},
+            {"INFINITE_QUIVER;4",       500},
+            {"INFINITE_QUIVER;5",       1000},
+            {"SNIPE;1",                 100},
+            {"SNIPE;2",                 200},
+            {"SNIPE;3",                 300},
+            {"AIMING;1",                100},
+            {"AIMING;2",                200},
+            {"AIMING;3",                300},
+            {"AIMING;4",                500},
+            {"AIMING;5",                1000},
+            {"CHANCE;1",                100},
+            {"CHANCE;2",                200},
+            {"CHANCE;3",                300},
+            {"PIERCING;1",              100},
+            {"TRUE_PROTECTION;1",       890000},
+            {"ENDER_SLAYER;6",          1500000},
+            {"DRAGON_HUNTER;1",         1000000},
+            {"DRAGON_HUNTER;2",         2000000},
+            {"DRAGON_HUNTER;3",         4000000},
+            {"DRAGON_HUNTER;4",         8000000},
+            {"DRAGON_HUNTER;5",         16000000}};
     int port = 80;
     const int margin = 1000000;
     map<string, int> tiers{
@@ -168,6 +359,12 @@ private:
             {"MYTHIC",    5}
     };
 
+    void BazaarAPI() {
+        while (running) {
+            cURLpp::Easy fetch;
+        }
+    }
+
     //Functions
     static bool isLevel100(int tier, int xp) {
         switch (tier) {
@@ -178,47 +375,12 @@ private:
             case 2:
                 return xp >= 12626665;
             case 3:
-                return xp >= 17222200;
+                return xp >= 18608500;
             default:
                 return xp >= 25353230;
         }
     }
 
-    static std::string to_roman_numerals(const int &number) {
-        switch (number) {
-            case 1:
-                return "I";
-                break;
-            case 2:
-                return "II";
-                break;
-            case 3:
-                return "III";
-                break;
-            case 4:
-                return "IV";
-                break;
-            case 5:
-                return "V";
-                break;
-            case 6:
-                return "VI";
-                break;
-            case 7:
-                return "VII";
-            case 8:
-                return "VIII";
-                break;
-            case 9:
-                return "IX";
-                break;
-            case 10:
-                return "X";
-                break;
-            default:
-                return "";
-        }
-    }
 
     int to_tier(const string &tier) {
         return tiers[tier];
@@ -227,9 +389,18 @@ private:
     void get3DayAvg() {
         while (running) {
             lock.lock();
+            AveragePrice.clear();
             ostringstream getStreams;
             getStreams << options::Url("localhost:1926/api/auction_averages");
-            AveragePrice = nlohmann::json::parse(getStreams.str());
+            simdjson::ondemand::parser AvgParser;
+            simdjson::padded_string AvgPadded = getStreams.str();
+            simdjson::ondemand::document AvgDoc = AvgParser.iterate(AvgPadded);
+            auto AvgObj = AvgDoc.get_object();
+            for (auto field : AvgObj) {
+                AveragePrice.insert({string(field.unescaped_key().value()),
+                                     int(field.value().find_field("price").get_int64())});
+            }
+//            AveragePrice = nlohmann::json::parse(getStreams.str());
             lock.unlock();
             for (int i = 0; i < 720; ++i) {
                 if (!running) return; else this_thread::sleep_for(chrono::seconds(15));
@@ -282,14 +453,18 @@ private:
         do {
             getThreaded[page].perform();
         } while (curlpp::infos::ResponseCode::get(getThreaded[page]) != 200 || getStream[page].str() == "");
+        simdjson::padded_string getPadded = getStream[page].str();
         auto downloadtime = high_resolution_clock::now();
-        auto getJson = nlohmann::json::parse(getStream[page].str());
-        int size = getJson["auctions"].is_null() ? 0 : getJson["auctions"].size();
-        if (getJson["success"].type() == nlohmann::detail::value_t::boolean && getJson["success"].get<bool>()) {
-            for (int i = 0; i < size; ++i) {
+        auto getJson = getParser[page].iterate(getPadded);
+//        auto getJson = nlohmann::json::parse(getStream[page].str());
+        int size = 0;
+        if (!getJson["success"].is_null() && getJson["success"].get_bool()) {
+            auto auctions = getJson["auctions"].get_array();
+            for (auto i : auctions) {
+                ++size;
 //                cout<<"Analysing "<<i<<" on page "<<page<<'\n';
-                if (getJson["auctions"][i]["bin"].type() == nlohmann::detail::value_t::boolean) {
-                    auto val = Cache.find(getJson["auctions"][i]["uuid"].get<string>());
+                if (!i["bin"].is_null()) {
+                    auto val = Cache.find(string(i["uuid"].get_string().value()));
                     if (val != Cache.end()) {
                         if (prices.find(val->second.first) != prices.end()) {
                             prices.find(val->second.first)->
@@ -301,7 +476,7 @@ private:
                     } else {
 //                        cout << "New entry on page: " << page << endl;
                         auto c = cppcodec::base64_rfc4648::decode(
-                                getJson["auctions"][i]["item_bytes"].get<string>());
+                                string(i["item_bytes"].get_string().value()));
                         string d(c.begin(), c.end());
 
                         nbt::NBT nbtdata;
@@ -309,6 +484,8 @@ private:
                         zstr::istream decoded(str);
                         nbtdata.decode(decoded);
                         string ID;
+                        int value = 0;
+//                        cout<<nbtdata<<endl;
                         if (nbt::get_list<nbt::TagCompound>
                                     (nbtdata.at<nbt::TagList>("i"))[0]
                                     .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes").base
@@ -339,13 +516,8 @@ private:
 
                         } else if (nbt::get_list<nbt::TagCompound>
                                            (nbtdata.at<nbt::TagList>(
-                                                   "i"))[0]
-                                                                                                                                                                                                                                                                               .at<nbt::TagCompound>(
-                                                                                                                                                                                                                                                                                       "tag").at<nbt::TagCompound>(
-                                        "ExtraAttributes")
-                                                                                                                                                                                                                                                                               .at<nbt::TagString>(
-                                                                                                                                                                                                                                                                                       "id").length() >
-                                   8
+                                                   "i"))[0].at<nbt::TagCompound>("tag").at<nbt::TagCompound>(
+                                "ExtraAttributes").at<nbt::TagString>("id").length() > 8
                                    && nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                               .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                               .at<nbt::TagString>("id").substr(0, 8) == "STARRED_") {
@@ -359,27 +531,27 @@ private:
                         }
                         if (prices.find(ID) != prices.end()) {
                             prices.find(ID)->second.emplace_back(
-                                    getJson["auctions"][i]["starting_bid"],
-                                    getJson["auctions"][i]["uuid"],
-                                    getJson["auctions"][i]["start"],
-                                    getJson["auctions"][i]["item_name"],
-                                    getJson["auctions"][i]["tier"]);
+                                    i["starting_bid"].get_int64(),
+                                    string(i["uuid"].get_string().value()),
+                                    i["start"].get_int64(),
+                                    string(i["item_name"].get_string().value()),
+                                    string(i["tier"].get_string().value()));
                         } else {
                             prices.insert({ID, {tuple<int, string, long long, string, string>(
-                                    getJson["auctions"][i]["starting_bid"],
-                                    getJson["auctions"][i]["uuid"],
-                                    getJson["auctions"][i]["start"],
-                                    getJson["auctions"][i]["item_name"],
-                                    getJson["auctions"][i]["tier"])}});
+                                    i["starting_bid"].get_int64(),
+                                    string(i["uuid"].get_string().value()),
+                                    i["start"].get_int64(),
+                                    string(i["item_name"].get_string().value()),
+                                    string(i["tier"].get_string().value()))}});
                             localUniqueIDs.insert(ID);
                         }
-                        local_cache.insert({getJson["auctions"][i]["uuid"], {
+                        local_cache.insert({string(i["uuid"].get_string().value()), {
                                 ID, tuple<int, string, long long, string, string>(
-                                        getJson["auctions"][i]["starting_bid"],
-                                        getJson["auctions"][i]["uuid"],
-                                        getJson["auctions"][i]["start"],
-                                        getJson["auctions"][i]["item_name"],
-                                        getJson["auctions"][i]["tier"])}});
+                                        int(i["starting_bid"].get_int64()),
+                                        string(i["uuid"].get_string().value()),
+                                        (long long) (i["start"].get_int64()),
+                                        string(i["item_name"].get_string().value()),
+                                        string(i["tier"].get_string().value()))}});
                     }
                 }
 
@@ -395,7 +567,7 @@ private:
             getStream[page].str("");
         }
         --threads;
-        return {getJson["totalPages"], getJson["lastUpdated"]};
+        return {getJson["totalPages"].get_int64(), getJson["lastUpdated"].get_int64()};
     }
 
     bool authenticated(string const &UUID, string const &key, string const &IP) {
@@ -449,47 +621,18 @@ private:
                     if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
 
-                        if (AveragePrice[member]["price"].is_null()) {
-                            //cout<<"COULD NOT FIND AVERAGE PRICE FOR: "<<member<<"\n";
-                            if (get<0>(*(a.begin())) <=
-                                int(min(get<0>(*(a.begin() + 1)) / 10 * 9,
-                                        (get<0>(*(a.begin() + 1)) - margin)))) {
-                                if (get<2>(*a.begin()) >= lastUpdate) {
-                                    sniper[sniper.size()] = {
-                                            make_pair("uuid", (get<1>(*a.begin()))),
-                                            make_pair("item_name",
-                                                      (get<3>(*a.begin()))),
-                                            make_pair("buy_price",
-                                                      get<0>(*a.begin())),
-                                            make_pair("sell_price",
-                                                      get<0>(*(a.begin() + 1)) - 1),
-                                            make_pair("tier", (get<4>(*a.begin())))};
-                                } else {
-                                    bin_full[bin_full.size()] = {
-                                            make_pair("uuid", (get<1>(*a.begin()))),
-                                            make_pair("item_name",
-                                                      (get<3>(*a.begin()))),
-                                            make_pair("buy_price",
-                                                      get<0>(*a.begin())),
-                                            make_pair("sell_price",
-                                                      get<0>(*(a.begin() + 1)) - 1),
-                                            make_pair("tier", (get<4>(*a.begin())))};
-                                }
-                            } else if (get<0>(*a.begin()) <=
-                                       int((get<0>(*(a.begin() + 1))) / 100 * 99)) {
-                                bin_free[bin_free.size()] = {
-                                        make_pair("uuid", (get<1>(*a.begin()))),
-                                        make_pair("item_name", (get<3>(*a.begin()))),
-                                        make_pair("buy_price", get<0>(*a.begin())),
-                                        make_pair("sell_price",
-                                                  get<0>(*(a.begin() + 1)) - 1),
-                                        make_pair("tier", (get<4>(*a.begin())))};
-                            }
+                        if (AveragePrice.find(member) == AveragePrice.end()) {
+                            cout << "COULD NOT FIND AVERAGE PRICE FOR: " << member << "\n";
+                            unsortable[unsortable.size()] = {
+                                    make_pair("uuid", (get<1>(*a.begin()))),
+                                    make_pair("item_name", (get<3>(*a.begin()))),
+                                    make_pair("buy_price", get<0>(*a.begin())),
+                                    make_pair("tier", (get<4>(*a.begin())))};
                         } else {
                             int minprice = min(get<0>(*(a.begin() + 1)),
-                                               AveragePrice[member]["price"].get<int>());
+                                               AveragePrice[member]);
                             if (get<0>(*a.begin()) <=
-                                int(min(minprice - margin, minprice / 10 * 9))) {
+                                min(minprice - margin, minprice / 10 * 9)) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
                                             make_pair("uuid", (get<1>(*a.begin()))),
@@ -498,9 +641,7 @@ private:
                                             make_pair("buy_price",
                                                       get<0>(*a.begin())),
                                             make_pair("sell_price",
-                                                      min(AveragePrice[member]["price"].get<int>(),
-                                                          get<0>(*(a.begin() + 1))) -
-                                                      1),
+                                                      minprice),
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 } else {
                                     bin_full[bin_full.size()] = {
@@ -510,70 +651,32 @@ private:
                                             make_pair("buy_price",
                                                       get<0>(*a.begin())),
                                             make_pair("sell_price",
-                                                      min(AveragePrice[member]["price"].get<int>(),
+                                                      min(AveragePrice[member],
                                                           get<0>(*(a.begin() + 1))) -
                                                       1),
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
                             } else if (get<0>(*a.begin()) <
                                        int((min(get<0>(*(a.begin() + 1)),
-                                                AveragePrice[member]["price"].get<int>())) / 100 * 99)) {
+                                                AveragePrice[member])) / 100 * 99)) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
                                         make_pair("item_name", (get<3>(*a.begin()))),
                                         make_pair("buy_price", get<0>(*a.begin())),
                                         make_pair("sell_price",
-                                                  min(AveragePrice[member]["price"].get<int>(),
+                                                  min(AveragePrice[member],
                                                       get<0>(*(a.begin() + 1))) - 1),
                                         make_pair("tier", (get<4>(*a.begin())))};
                             }
                         }
                     } else {
-                        if (AveragePrice[member]["price"].is_null()) {
-                            // cout<<"UNABLE TO CLASSIFY: "<<member<<"\n";
-                            unsortable[unsortable.size()] = {
-                                    make_pair("uuid", (get<1>(*a.begin()))),
-                                    make_pair("item_name", (get<3>(*a.begin()))),
-                                    make_pair("buy_price", get<0>(*a.begin())),
-                                    make_pair("tier", (get<4>(*a.begin())))};
+                        // cout<<"UNABLE TO CLASSIFY: "<<member<<"\n";
+                        unsortable[unsortable.size()] = {
+                                make_pair("uuid", (get<1>(*a.begin()))),
+                                make_pair("item_name", (get<3>(*a.begin()))),
+                                make_pair("buy_price", get<0>(*a.begin())),
+                                make_pair("tier", (get<4>(*a.begin())))};
 
-                        } else {
-                            if (get<0>(*a.begin()) <=
-                                int(min(AveragePrice[member]["price"].get<int>() - margin,
-                                        int(AveragePrice[member]["price"].get<int>() / 10 * 9)))) {
-                                if (get<2>(*a.begin()) >= lastUpdate) {
-                                    sniper[sniper.size()] = {
-                                            make_pair("uuid", (get<1>(*a.begin()))),
-                                            make_pair("item_name",
-                                                      (get<3>(*a.begin()))),
-                                            make_pair("buy_price",
-                                                      get<0>(*a.begin())),
-                                            make_pair("sell_price",
-                                                      get<0>(*(a.begin() + 1)) - 1),
-                                            make_pair("tier", (get<4>(*a.begin())))};
-                                } else {
-                                    bin_full[bin_full.size()] = {
-                                            make_pair("uuid", (get<1>(*a.begin()))),
-                                            make_pair("item_name",
-                                                      (get<3>(*a.begin()))),
-                                            make_pair("buy_price",
-                                                      get<0>(*a.begin())),
-                                            make_pair("sell_price",
-                                                      get<0>(*(a.begin() + 1)) - 1),
-                                            make_pair("tier", (get<4>(*a.begin())))};
-                                }
-                            } else if (get<0>(*a.begin()) <
-                                       int(AveragePrice[member]["price"].get<int>() / 100 * 99)) {
-                                bin_free[bin_free.size()] = {
-                                        make_pair("uuid", (get<1>(*a.begin()))),
-                                        make_pair("item_name",
-                                                  (get<3>(*a.begin()))),
-                                        make_pair("buy_price", get<0>(*a.begin())),
-                                        make_pair("sell_price",
-                                                  get<0>(*(a.begin() + 1)) - 1),
-                                        make_pair("tier", (get<4>(*a.begin())))};
-                            }
-                        }
                     }
                 }
                 auto endtime = high_resolution_clock::now();
