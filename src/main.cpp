@@ -118,7 +118,6 @@ public:
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
-        Cache.reserve(1000000);
         thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
@@ -148,7 +147,7 @@ private:
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
-    unordered_map<string, array<tuple<int, string, long long, string, string>, 2>> GlobalPrices;
+    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
     set<string> UniqueIDs;
     atomic<bool> running, active = false, sleep;
@@ -329,26 +328,26 @@ private:
             {"INFINITE_QUIVER;2",       200},
             {"INFINITE_QUIVER;3",       300},
             {"INFINITE_QUIVER;4",       500},
-            {"INFINITE_QUIVER;5", 1000},
-            {"SNIPE;1",           100},
-            {"SNIPE;2",           200},
-            {"SNIPE;3",           300},
-            {"AIMING;1",          100},
-            {"AIMING;2",          200},
-            {"AIMING;3",          300},
-            {"AIMING;4",          500},
-            {"AIMING;5",          1000},
-            {"CHANCE;1",          100},
-            {"CHANCE;2",          200},
-            {"CHANCE;3",          300},
-            {"PIERCING;1",        100},
-            {"TRUE_PROTECTION;1", 890000},
-            {"ENDER_SLAYER;6",    1500000},
-            {"DRAGON_HUNTER;1",   1000000},
-            {"DRAGON_HUNTER;2",   2000000},
-            {"DRAGON_HUNTER;3",   4000000},
-            {"DRAGON_HUNTER;4",   8000000},
-            {"DRAGON_HUNTER;5",   16000000}};
+            {"INFINITE_QUIVER;5",       1000},
+            {"SNIPE;1",                 100},
+            {"SNIPE;2",                 200},
+            {"SNIPE;3",                 300},
+            {"AIMING;1",                100},
+            {"AIMING;2",                200},
+            {"AIMING;3",                300},
+            {"AIMING;4",                500},
+            {"AIMING;5",                1000},
+            {"CHANCE;1",                100},
+            {"CHANCE;2",                200},
+            {"CHANCE;3",                300},
+            {"PIERCING;1",              100},
+            {"TRUE_PROTECTION;1",       890000},
+            {"ENDER_SLAYER;6",          1500000},
+            {"DRAGON_HUNTER;1",         1000000},
+            {"DRAGON_HUNTER;2",         2000000},
+            {"DRAGON_HUNTER;3",         4000000},
+            {"DRAGON_HUNTER;4",         8000000},
+            {"DRAGON_HUNTER;5",         16000000}};
     int port = 80;
     const int margin = 1000000;
     map<string, int> tiers{
@@ -411,9 +410,8 @@ private:
 
     void clearCache() {
         while (running) {
-            if (Cache.size() > 1000000) {
+            if (Cache.size() > 10000000) {
                 Cache.clear();
-                Cache.reserve(1000000);
             }
             this_thread::sleep_for(chrono::seconds(60));
         }
@@ -449,10 +447,8 @@ private:
     pair<int, long long> getPage(int page) {
         ++threads;
         auto starttime = high_resolution_clock::now();
-        unordered_map<string, array<tuple<int, string, long long, string, string>, 2>> prices;
-        prices.reserve(2000);
+        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
         unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
-        local_cache.reserve(5000);
         set<string> localUniqueIDs;
         do {
             getThreaded[page].perform();
@@ -472,18 +468,10 @@ private:
                         auto val = Cache.find(string(i["uuid"].get_string().value()));
                         if (val != Cache.end()) {
                             if (prices.find(val->second.first) != prices.end()) {
-                                if (prices.find(val->second.first)->second[0] > val->second.second) {
-                                    prices.find(val->second.first)->second[1] = prices.find(
-                                            val->second.first)->second[0];
-                                    prices.find(val->second.first)->second[0] = val->second.second;
-                                } else if (prices.find(val->second.first)->second[1] > val->second.second)
-                                    prices.find(val->second.first)->second[1] = val->second.second;
+                                prices.find(val->second.first)->
+                                        second.push_back(val->second.second);
                             } else {
-                                prices.insert({val->second.first, {val->second.second,
-                                                                   tuple<int, string, long long, string, string>(
-                                                                           INT_MAX, "Reserved", 0, "Reserved",
-                                                                           "Reserved"
-                                                                   )}});
+                                prices.insert({val->second.first, {val->second.second}});
                                 localUniqueIDs.insert(val->second.first);
                             }
                         } else {
@@ -542,23 +530,20 @@ private:
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                         .at<nbt::TagString>("id");
                             }
-                            tuple<int, string, long long, string, string> activeauction =
-                                    {i["starting_bid"].get_int64(),
-                                     string(i["uuid"].get_string().value()),
-                                     i["start"].get_int64(),
-                                     string(i["item_name"].get_string().value()),
-                                     string(i["tier"].get_string().value())};
                             if (prices.find(ID) != prices.end()) {
-                                if (prices.find(ID)->second[0] > activeauction) {
-                                    prices.find(ID)->second[1] = prices.find(ID)->second[0];
-                                    prices.find(ID)->second[0] = activeauction;
-                                } else if (prices.find(ID)->second[1] > activeauction)
-                                    prices.find(ID)->second[1] = activeauction;
+                                prices.find(ID)->second.emplace_back(
+                                        i["starting_bid"].get_int64(),
+                                        string(i["uuid"].get_string().value()),
+                                        i["start"].get_int64(),
+                                        string(i["item_name"].get_string().value()),
+                                        string(i["tier"].get_string().value()));
                             } else {
-                                prices.insert({ID, {activeauction,
-                                                    tuple<int, string, long long, string, string>(
-                                                            INT_MAX, "Reserved", 0, "Reserved", "Reserved"
-                                                    )}});
+                                prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                        i["starting_bid"].get_int64(),
+                                        string(i["uuid"].get_string().value()),
+                                        i["start"].get_int64(),
+                                        string(i["item_name"].get_string().value()),
+                                        string(i["tier"].get_string().value()))}});
                                 localUniqueIDs.insert(ID);
                             }
                             local_cache.insert({string(i["uuid"].get_string().value()), {
@@ -578,22 +563,8 @@ private:
             writing.lock();
             UniqueIDs.merge(localUniqueIDs);
             for (auto &i : prices) {
-                if (GlobalPrices.find(i.first) != GlobalPrices.end()) {
-                    auto &C = GlobalPrices[i.first];
-                    if (C[0] > i.second[0]) {
-                        if (C[1] > i.second[1]) {
-                            C[0] = i.second[0];
-                            C[1] = i.second[1];
-                        } else {
-                            C[1] = C[0];
-                            C[0] = i.second[0];
-                        }
-                    } else if (C[1] > i.second[0]) {
-                        C[1] = i.second[0];
-                    }
-                } else {
-                    GlobalPrices.insert(i);
-                }
+                auto &C = GlobalPrices[i.first];
+                C.insert(C.end(), i.second.begin(), i.second.end());
             }
             Cache.merge(local_cache);
             writing.unlock();
@@ -651,7 +622,7 @@ private:
                     for (auto &r : a) {
                         ++count;
                     }
-                    if (get<1>(GlobalPrices.find(member)->second[1]) != "Reserved") //2 or more
+                    if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
 
                         if (AveragePrice.find(member) == AveragePrice.end()) {
