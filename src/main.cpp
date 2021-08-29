@@ -20,6 +20,7 @@
 #include "crow_all.h"
 #include <zlib.h>
 #include <cppcodec/base64_rfc4648.hpp>
+#include "robin_hood.h"
 #include "zstr.hpp"
 #include "nbt.hpp"
 #include <sys/wait.h>
@@ -147,13 +148,13 @@ private:
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
-    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
-    unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
-    set<string> UniqueIDs;
+    robin_hood::unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
+    robin_hood::unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
+    robin_hood::unordered_set<string> UniqueIDs;
     atomic<bool> running, active = false, sleep;
 //    nlohmann::json AveragePrice;
     simdjson::ondemand::parser getParser[200];
-    unordered_map<string, int> AveragePrice;
+    robin_hood::unordered_map<string, int> AveragePrice;
     nlohmann::json sniper = nlohmann::json::array(), bin_full = nlohmann::json::array(),
             bin_free = nlohmann::json::array(), unsortable = nlohmann::json::array();
     atomic<long long> updated = 0;
@@ -447,9 +448,9 @@ private:
     pair<int, long long> getPage(int page) {
         ++threads;
         auto starttime = high_resolution_clock::now();
-        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
-        unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
-        set<string> localUniqueIDs;
+        robin_hood::unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
+        robin_hood::unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
+        robin_hood::unordered_set<string> localUniqueIDs;
         do {
             getThreaded[page].perform();
         } while (curlpp::infos::ResponseCode::get(getThreaded[page]) != 200 || getStream[page].str() == "");
@@ -471,7 +472,7 @@ private:
                                 prices.find(val->second.first)->
                                         second.push_back(val->second.second);
                             } else {
-                                prices.insert({val->second.first, {val->second.second}});
+                                prices[val->second.first] = {val->second.second};
                                 localUniqueIDs.insert(val->second.first);
                             }
                         } else {
@@ -538,12 +539,12 @@ private:
                                         string(i["item_name"].get_string().value()),
                                         string(i["tier"].get_string().value()));
                             } else {
-                                prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                prices[ID] = {tuple<int, string, long long, string, string>(
                                         i["starting_bid"].get_int64(),
                                         string(i["uuid"].get_string().value()),
                                         i["start"].get_int64(),
                                         string(i["item_name"].get_string().value()),
-                                        string(i["tier"].get_string().value()))}});
+                                        string(i["tier"].get_string().value()))};
                                 localUniqueIDs.insert(ID);
                             }
                             local_cache.insert({string(i["uuid"].get_string().value()), {
@@ -561,12 +562,12 @@ private:
 
             }
             writing.lock();
-            UniqueIDs.merge(localUniqueIDs);
+            UniqueIDs.insert(localUniqueIDs.begin(), localUniqueIDs.end());
             for (auto &i : prices) {
                 auto &C = GlobalPrices[i.first];
                 C.insert(C.end(), i.second.begin(), i.second.end());
             }
-            Cache.merge(local_cache);
+            Cache.insert(local_cache.begin(), local_cache.end());
             writing.unlock();
             getStream[page].str("");
         }
