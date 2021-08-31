@@ -143,13 +143,13 @@ private:
     //Objects
     crow::SimpleApp CrowServer;
     //Data
-    mutex cachewrite, newelement, lock, exit;
+    mutex writing, lock, exit;
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
-    unordered_map<string, pair<vector<tuple<int, string, long long, string, string>>, unique_ptr<mutex>>> GlobalPrices;
+    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
     unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
-    vector<string> UniqueIDs;
+    set<string> UniqueIDs;
     atomic<bool> running, active = false, sleep;
 //    nlohmann::json AveragePrice;
     simdjson::ondemand::parser getParser[200];
@@ -447,9 +447,9 @@ private:
     pair<int, long long> getPage(int page) {
         ++threads;
         auto starttime = high_resolution_clock::now();
-//        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
-//        unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
-        vector<string> localUniqueIDs;
+        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
+        unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
+        set<string> localUniqueIDs;
         do {
             getThreaded[page].perform();
         } while (curlpp::infos::ResponseCode::get(getThreaded[page]) != 200 || getStream[page].str() == "");
@@ -474,19 +474,12 @@ private:
                     if (i["bin"].get_bool()) {
                         auto val = Cache.find(string(i["uuid"].get_string().value()));
                         if (val != Cache.end()) {
-                            if (GlobalPrices.find(val->second.first) != GlobalPrices.end()) {
-                                GlobalPrices.find(val->second.first)->second.second->lock();
-                                GlobalPrices.find(val->second.first)->
-                                        second.first.push_back(val->second.second);
-                                GlobalPrices.find(val->second.first)->second.second->unlock();
+                            if (prices.find(val->second.first) != prices.end()) {
+                                prices.find(val->second.first)->
+                                        second.push_back(val->second.second);
                             } else {
-                                newelement.lock();
-                                GlobalPrices.insert({val->second.first,
-                                                     pair<vector<tuple<int, string,
-                                                             long long, string, string>>, unique_ptr<mutex>>
-                                                             ({val->second.second}, new mutex)});
-                                localUniqueIDs.push_back(val->second.first);
-                                newelement.unlock();
+                                prices.insert({val->second.first, {val->second.second}});
+                                localUniqueIDs.insert(val->second.first);
                             }
                         } else {
                             //                        cout << "New entry on page: " << page << endl;
@@ -544,37 +537,29 @@ private:
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                         .at<nbt::TagString>("id");
                             }
-                            if (GlobalPrices.find(ID) != GlobalPrices.end()) {
-                                GlobalPrices.find(ID)->second.second->lock();
-                                GlobalPrices.find(ID)->second.first.emplace_back(
+                            if (prices.find(ID) != prices.end()) {
+                                prices.find(ID)->second.emplace_back(
                                         i["starting_bid"].get_int64(),
                                         string(i["uuid"].get_string().value()),
                                         i["start"].get_int64(),
                                         string(i["item_name"].get_string().value()),
                                         string(i["tier"].get_string().value()));
-                                GlobalPrices.find(ID)->second.second->unlock();
                             } else {
-                                newelement.lock();
-                                GlobalPrices.insert({ID, pair<vector<tuple<int, string,
-                                        long long, string, string>>, unique_ptr<mutex>>(
-                                        {tuple<int, string, long long, string, string>(
-                                                i["starting_bid"].get_int64(),
-                                                string(i["uuid"].get_string().value()),
-                                                i["start"].get_int64(),
-                                                string(i["item_name"].get_string().value()),
-                                                string(i["tier"].get_string().value()))}, new mutex)});
-                                localUniqueIDs.push_back(ID);
-                                newelement.unlock();
+                                prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                        i["starting_bid"].get_int64(),
+                                        string(i["uuid"].get_string().value()),
+                                        i["start"].get_int64(),
+                                        string(i["item_name"].get_string().value()),
+                                        string(i["tier"].get_string().value()))}});
+                                localUniqueIDs.insert(ID);
                             }
-                            cachewrite.lock();
-                            Cache.insert({string(i["uuid"].get_string().value()), {
+                            local_cache.insert({string(i["uuid"].get_string().value()), {
                                     ID, tuple<int, string, long long, string, string>(
                                             int(i["starting_bid"].get_int64()),
                                             string(i["uuid"].get_string().value()),
                                             (long long) (i["start"].get_int64()),
                                             string(i["item_name"].get_string().value()),
                                             string(i["tier"].get_string().value()))}});
-                            cachewrite.unlock();
                         }
                     }
                 } catch (...) {
@@ -582,12 +567,14 @@ private:
                 }
 
             }
-            UniqueIDs.insert(UniqueIDs.end(), localUniqueIDs.begin(), localUniqueIDs.end());
-//            for (auto &i : prices) {
-//                auto &C = GlobalPrices[i.first];
-//                C.insert(C.end(), i.second.begin(), i.second.end());
-//            }
-//            Cache.merge(local_cache);
+            writing.lock();
+            UniqueIDs.merge(localUniqueIDs);
+            for (auto &i : prices) {
+                auto &C = GlobalPrices[i.first];
+                C.insert(C.end(), i.second.begin(), i.second.end());
+            }
+            Cache.merge(local_cache);
+            writing.unlock();
             getStream[page].str("");
         }
         --threads;
@@ -610,7 +597,7 @@ private:
             lock.lock();
             auto starttime = high_resolution_clock::now();
             UniqueIDs.clear();
-
+            GlobalPrices.clear();
             vector<std::thread> children;
             cout << "Beginning Cycle\n";
             pair<int, long long> information = getPage(0);
@@ -636,14 +623,13 @@ private:
                 //Processing
                 int count = 0;
                 auto downloadtime = high_resolution_clock::now();
-                auto UniqueIDsSet = set<string>(UniqueIDs.begin(), UniqueIDs.end());
-                for (auto &member : UniqueIDsSet) {
-                    auto &a = GlobalPrices.find(member)->second.first;
+                for (auto &member : UniqueIDs) {
+                    auto &a = GlobalPrices.find(member)->second;
                     sort(a.begin(), a.end());
                     for (auto &r : a) {
                         ++count;
                     }
-                    if (a.size() >= 2) //2 or more
+                    if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
 
                         if (AveragePrice.find(member) == AveragePrice.end()) {
@@ -710,9 +696,6 @@ private:
                 cout << "Processing speed: " << processingspeed.count()
                      << "ms, Total speed: " << totalspeed.count() << "ms" << endl;
                 updated = information.second;
-                for (auto &i : GlobalPrices) {
-                    i.second.first.clear();
-                }
             }
             lock.unlock();
             this_thread::sleep_until(
