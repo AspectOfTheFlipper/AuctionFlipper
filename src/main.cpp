@@ -453,9 +453,16 @@ private:
         do {
             getThreaded[page].perform();
         } while (curlpp::infos::ResponseCode::get(getThreaded[page]) != 200 || getStream[page].str() == "");
-        simdjson::padded_string getPadded = getStream[page].str();
         auto downloadtime = high_resolution_clock::now();
-        auto getJson = getParser[page].iterate(getPadded);
+        simdjson::padded_string getPadded;
+        simdjson::ondemand::document getJson;
+        try {
+            getPadded = getStream[page].str();
+            getJson = getParser[page].iterate(getPadded);
+        } catch (...) {
+            cout << "Failed to parse JSON\n";
+            return {0, 0};
+        }
 //        auto getJson = nlohmann::json::parse(getStream[page].str());
         int size = 0;
         if (!getJson["success"].is_null() && getJson["success"].get_bool()) {
