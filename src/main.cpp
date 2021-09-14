@@ -126,7 +126,8 @@ public:
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
-//        thread AvgApi([this]() { get3DayAvg(); });
+        Bazaar();
+        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
@@ -138,7 +139,7 @@ public:
         AuthApi.join();
         Sleep.join();
         cout << "AuthAPI exited." << endl;
-//        AvgApi.join();
+        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
@@ -168,7 +169,7 @@ private:
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
     ostringstream getStream[200];
-    int port = 8080;
+    int port = 80;
     const int margin = 1000000;
     map<string, int> tiers{
             {"COMMON",    0},
@@ -367,10 +368,20 @@ private:
                                 ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                         .at<nbt::TagString>("id").substr(8);
+                                auto &ExtraAttributes = nbt::get_list<nbt::TagCompound>
+                                        (nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes");
+                                modvalue += (ExtraAttributes.base.find("rarity_upgrades")
+                                             != ExtraAttributes.base.end()) * rarityupgradeprice;
                             } else {
                                 ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
                                         .at<nbt::TagString>("id");
+                                auto &ExtraAttributes = nbt::get_list<nbt::TagCompound>
+                                        (nbtdata.at<nbt::TagList>("i"))[0]
+                                        .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes");
+                                modvalue += (ExtraAttributes.base.find("rarity_upgrades")
+                                             != ExtraAttributes.base.end()) * rarityupgradeprice;
                             }
                             if (prices.find(ID) != prices.end()) {
                                 prices.find(ID)->second.emplace_back(
@@ -463,7 +474,7 @@ private:
                 auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
                     auto &a = GlobalPrices.find(member)->second;
-                    sort(a.begin(), a.end());
+                    sort(a.begin(), a.end(), Comparator);
 //                    for (auto &r : a) {
 //                        ++count;
 //                    }
@@ -478,9 +489,9 @@ private:
                                     make_pair("buy_price", get<0>(*a.begin())),
                                     make_pair("tier", (get<4>(*a.begin())))};
                         } else {
-                            int minprice = min(get<0>(*(a.begin() + 1)),
+                            int minprice = min(get<0>(*(a.begin() + 1)) - get<5>(*(a.begin() + 1)),
                                                AveragePrice[member]);
-                            if (get<0>(*a.begin()) <=
+                            if (get<0>(*a.begin()) - get<5>(*a.begin()) <=
                                 min(minprice - margin, minprice / 10 * 9)) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
@@ -490,7 +501,7 @@ private:
                                             make_pair("buy_price",
                                                       get<0>(*a.begin())),
                                             make_pair("sell_price",
-                                                      minprice),
+                                                      minprice + get<5>(*a.begin()) - 1),
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 } else {
                                     bin_full[bin_full.size()] = {
@@ -500,21 +511,17 @@ private:
                                             make_pair("buy_price",
                                                       get<0>(*a.begin())),
                                             make_pair("sell_price",
-                                                      min(AveragePrice[member],
-                                                          get<0>(*(a.begin() + 1))) -
-                                                      1),
+                                                      minprice + get<5>(*a.begin()) - 1),
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
-                            } else if (get<0>(*a.begin()) <
-                                       int((min(get<0>(*(a.begin() + 1)),
-                                                AveragePrice[member])) / 100 * 99)) {
+                            } else if (get<0>(*a.begin()) - get<5>(*a.begin()) <
+                                       minprice / 100 * 99) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
                                         make_pair("item_name", (get<3>(*a.begin()))),
                                         make_pair("buy_price", get<0>(*a.begin())),
                                         make_pair("sell_price",
-                                                  min(AveragePrice[member],
-                                                      get<0>(*(a.begin() + 1))) - 1),
+                                                  minprice + get<5>(*a.begin()) - 1),
                                         make_pair("tier", (get<4>(*a.begin())))};
                             }
                         }
@@ -536,6 +543,7 @@ private:
                 updated = information.second;
             }
             lock.unlock();
+            Bazaar();
             this_thread::sleep_until(
                     std::chrono::system_clock::time_point(std::chrono::milliseconds{updated + 69500}));
         }
