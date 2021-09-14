@@ -3,6 +3,8 @@
 #include <iostream>
 #include <atomic>
 #include <string>
+#include <algorithm>
+#include <set>
 //#include <pistache/common.h>
 //#include <pistache/cookie.h>
 //#include <pistache/endpoint.h>
@@ -159,195 +161,6 @@ private:
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
     ostringstream getStream[200];
-    unordered_map<string, int> Enchant_Prices = {
-            {"TELEKINESIS;1",           100},
-            {"SHARPNESS;1",             100},
-            {"SHARPNESS;2",             200},
-            {"SHARPNESS;3",             300},
-            {"SHARPNESS;4",             500},
-            {"SHARPNESS;5",             1000},
-            {"SMITE;1",                 100},
-            {"SMITE;2",                 200},
-            {"SMITE;3",                 300},
-            {"SMITE;4",                 500},
-            {"SMITE;5",                 1000},
-            {"BANE_OF_ARTHROPODS;1",    100},
-            {"BANE_OF_ARTHROPODS;2",    200},
-            {"BANE_OF_ARTHROPODS;3",    300},
-            {"BANE_OF_ARTHROPODS;4",    500},
-            {"BANE_OF_ARTHROPODS;5",    1000},
-            {"KNOCKBACK;1",             0},
-            {"KNOCKBACK;2",             0},
-            {"FIRE_ASPECT;1",           100},
-            {"FIRE_ASPECT;2",           200},
-            {"EXPERIENCE;1",            100},
-            {"EXPERIENCE;2",            200},
-            {"EXPERIENCE;3",            1000},
-            {"LOOTING;1",               100},
-            {"LOOTING;2",               200},
-            {"LOOTING;3",               1000},
-            {"SCAVENGER;1",             100},
-            {"SCAVENGER;2",             200},
-            {"SCAVENGER;3",             1000},
-            {"LUCK;1",                  100},
-            {"LUCK;2",                  200},
-            {"LUCK;3",                  300},
-            {"LUCK;4",                  500},
-            {"LUCK;5",                  1000},
-            {"CUBISM;1",                100},
-            {"CUBISM;2",                200},
-            {"CUBISM;3",                300},
-            {"CUBISM;4",                500},
-            {"CUBISM;5",                1000},
-            {"CLEAVE;1",                100},
-            {"CLEAVE;2",                200},
-            {"CLEAVE;3",                300},
-            {"CLEAVE;4",                500},
-            {"CLEAVE;5",                1000},
-            {"LIFE_STEAL;1",            100},
-            {"LIFE_STEAL;2",            200},
-            {"LIFE_STEAL;3",            100},
-            {"GIANT_KILLER;1",          100},
-            {"GIANT_KILLER;2",          200},
-            {"GIANT_KILLER;3",          300},
-            {"GIANT_KILLER;4",          500},
-            {"GIANT_KILLER;5",          1000},
-            {"CRITICAL;1",              100},
-            {"CRITICAL;2",              200},
-            {"CRITICAL;3",              300},
-            {"CRITICAL;4",              500},
-            {"CRITICAL;5",              1000},
-            {"FIRST_STRIKE;1",          500},
-            {"FIRST_STRIKE;2",          1000},
-            {"FIRST_STRIKE;3",          3000},
-            {"FIRST_STRIKE;4",          10000},
-            {"ENDER_SLAYER;1",          100},
-            {"ENDER_SLAYER;2",          200},
-            {"ENDER_SLAYER;3",          300},
-            {"ENDER_SLAYER;4",          500},
-            {"ENDER_SLAYER;5",          1000},
-            {"IMPALING;1",              1000},
-            {"IMPALING;2",              2000},
-            {"IMPALING;3",              5000},
-            {"EXECUTE;1",               100},
-            {"EXECUTE;2",               200},
-            {"EXECUTE;3",               300},
-            {"EXECUTE;4",               500},
-            {"EXECUTE;5",               1000},
-            {"THUNDERLORD;1",           100},
-            {"THUNDERLORD;2",           200},
-            {"THUNDERLORD;3",           300},
-            {"THUNDERLORD;4",           500},
-            {"THUNDERLORD;5",           1000},
-            {"LETHALITY;1",             100},
-            {"LETHALITY;2",             200},
-            {"LETHALITY;3",             300},
-            {"LETHALITY;4",             500},
-            {"LETHALITY;5",             1000},
-            {"SYPHON;1",                100},
-            {"SYPHON;2",                200},
-            {"SYPHON;3",                300},
-            {"VAMPIRISM;1",             100},
-            {"VAMPIRISM;2",             200},
-            {"VAMPIRISM;3",             300},
-            {"VAMPIRISM;4",             500},
-            {"VAMPIRISM;5",             1000},
-            {"VENOMOUS;1",              100},
-            {"VENOMOUS;2",              200},
-            {"VENOMOUS;3",              300},
-            {"VENOMOUS;4",              500},
-            {"VENOMOUS;5",              1000},
-            {"TRIPLE_STRIKE;1",         100},
-            {"TRIPLE_STRIKE;2",         200},
-            {"TRIPLE_STRIKE;3",         300},
-            {"TRIPLE_STRIKE;4",         500},
-            {"THUNDERBOLT;1",           100},
-            {"THUNDERBOLT;2",           200},
-            {"THUNDERBOLT;3",           300},
-            {"THUNDERBOLT;4",           500},
-            {"THUNDERBOLT;5",           1000},
-            {"PROSECUTE;1",             100},
-            {"PROSECUTE;2",             200},
-            {"PROSECUTE;3",             300},
-            {"PROSECUTE;4",             500},
-            {"PROSECUTE;5",             1000},
-            {"TITAN_KILLER;1",          100},
-            {"TITAN_KILLER;2",          200},
-            {"TITAN_KILLER;3",          300},
-            {"TITAN_KILLER;4",          500},
-            {"TITAN_KILLER;5",          1000},
-            {"PROJECTILE_PROTECTION;1", 100},
-            {"PROJECTILE_PROTECTION;2", 200},
-            {"PROJECTILE_PROTECTION;3", 300},
-            {"PROJECTILE_PROTECTION;4", 500},
-            {"PROJECTILE_PROTECTION;5", 1000},
-            {"PROTECTION;1",            100},
-            {"PROTECTION;2",            200},
-            {"PROTECTION;3",            300},
-            {"PROTECTION;4",            500},
-            {"PROTECTION;5",            1000},
-            {"BLAST_PROTECTION;1",      100},
-            {"BLAST_PROTECTION;2",      200},
-            {"BLAST_PROTECTION;3",      300},
-            {"BLAST_PROTECTION;4",      500},
-            {"BLAST_PROTECTION;5",      1000},
-            {"FIRE_PROTECTION;1",       100},
-            {"FIRE_PROTECTION;2",       200},
-            {"FIRE_PROTECTION;3",       300},
-            {"FIRE_PROTECTION;4",       500},
-            {"FIRE_PROTECTION;5",       1000},
-            {"RESPIRATION;1",           100},
-            {"RESPIRATION;2",           200},
-            {"RESPIRATION;3",           300},
-            {"AQUA_AFFINITY;1",         100},
-            {"THORNS;1",                100},
-            {"THORNS;2",                200},
-            {"THORNS;3",                300},
-            {"GROWTH;1",                100},
-            {"GROWTH;2",                200},
-            {"GROWTH;3",                300},
-            {"GROWTH;4",                500},
-            {"GROWTH;5",                1000},
-            {"EFFICIENCY;1",            100},
-            {"EFFICIENCY;2",            200},
-            {"EFFICIENCY;3",            300},
-            {"EFFICIENCY;4",            500},
-            {"EFFICIENCY;5",            1000},
-            {"EFFICIENCY;6",            0},
-            {"SMELTING_TOUCH;1",        100},
-            {"SILK_TOUCH;1",            100},
-            {"POWER;1",                 100},
-            {"POWER;2",                 200},
-            {"POWER;3",                 300},
-            {"POWER;4",                 500},
-            {"POWER;5",                 1000},
-            {"PUNCH;1",                 100},
-            {"PUNCH;2",                 200},
-            {"FLAME;1",                 100},
-            {"INFINITE_QUIVER;1",       100},
-            {"INFINITE_QUIVER;2",       200},
-            {"INFINITE_QUIVER;3",       300},
-            {"INFINITE_QUIVER;4",       500},
-            {"INFINITE_QUIVER;5",       1000},
-            {"SNIPE;1",                 100},
-            {"SNIPE;2",                 200},
-            {"SNIPE;3",                 300},
-            {"AIMING;1",                100},
-            {"AIMING;2",                200},
-            {"AIMING;3",                300},
-            {"AIMING;4",                500},
-            {"AIMING;5",                1000},
-            {"CHANCE;1",                100},
-            {"CHANCE;2",                200},
-            {"CHANCE;3",                300},
-            {"PIERCING;1",              100},
-            {"TRUE_PROTECTION;1",       890000},
-            {"ENDER_SLAYER;6",          1500000},
-            {"DRAGON_HUNTER;1",         1000000},
-            {"DRAGON_HUNTER;2",         2000000},
-            {"DRAGON_HUNTER;3",         4000000},
-            {"DRAGON_HUNTER;4",         8000000},
-            {"DRAGON_HUNTER;5",         16000000}};
     int port = 80;
     const int margin = 1000000;
     map<string, int> tiers{
@@ -359,14 +172,16 @@ private:
             {"MYTHIC",    5}
     };
 
-    void BazaarAPI() {
-        while (running) {
-            cURLpp::Easy fetch;
-        }
+    void Bazaar() {
+        ostringstream Bazaar;
+        Bazaar << cURLpp::Options::Url("https://api.hypixel.net/skyblock/bazaar");
+        simdjson::ondemand::parser BzParser;
+        simdjson::padded_string BzPadded = Bazaar.str();
+        simdjson::ondemand::document BzDoc = BzParser.iterate(BzPadded);
     }
 
     //Functions
-    static bool isLevel100(int tier, int xp) {
+    static bool isLevel100(int tier, int xp){
         switch (tier) {
             case 0:
                 return xp >= 5624785;
@@ -416,7 +231,9 @@ private:
             this_thread::sleep_for(chrono::seconds(60));
         }
     }
-
+    //    void Bazaar(){
+    //
+    //    }
     void getAuth() {
         while (running) {
             ifstream WhitelistJson("whitelist.json");
@@ -444,7 +261,7 @@ private:
         }
     }
 
-    pair<int, long long> getPage(int page) {
+    pair<int, long long> getPage(int page, bool fallback=false) {
         ++threads;
         auto starttime = high_resolution_clock::now();
         unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
@@ -460,8 +277,12 @@ private:
             getPadded = getStream[page].str();
             getJson = getParser[page].iterate(getPadded);
         } catch (...) {
-            cout << "Failed to parse JSON\n";
-            return {0, 0};
+            if(fallback)
+            {
+                return {0, 0};
+            }
+//            cout << "Failed to parse JSON\n";
+            return getPage(page, true);
         }
 //        auto getJson = nlohmann::json::parse(getStream[page].str());
         int size = 0;
@@ -486,7 +307,7 @@ private:
                             auto c = cppcodec::base64_rfc4648::decode(
                                     string(i["item_bytes"].get_string().value()));
                             string d(c.begin(), c.end());
-
+                            int modvalue=0;
                             nbt::NBT nbtdata;
                             istringstream str(d);
                             zstr::istream decoded(str);
@@ -621,14 +442,14 @@ private:
                 for (auto &child : children)
                     child.join();//This sleeps until all fetching threads are done.
                 //Processing
-                int count = 0;
+//                int count = 0;
                 auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
                     auto &a = GlobalPrices.find(member)->second;
                     sort(a.begin(), a.end());
-                    for (auto &r : a) {
-                        ++count;
-                    }
+//                    for (auto &r : a) {
+//                        ++count;
+//                    }
                     if (GlobalPrices.find(member)->second.size() >= 2) //2 or more
                     {
 
