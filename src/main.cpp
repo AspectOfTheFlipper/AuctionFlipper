@@ -36,7 +36,13 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 
-
+bool Comparator(const tuple<int, string, long long, string, string, int> &a, const tuple<int, string, long long, string, string, int> &b)
+{
+    if(max(get<0>(a) - get<5>(a), 0) != max(get<0>(b) - get<5>(b), 0))
+        return max(get<0>(a) - get<5>(a), 0) < max(get<0>(b) - get<5>(b), 0);
+    else
+        return get<2>(a)<get<2>(b);
+}
 class Server {
 public:
     //Functions
@@ -120,7 +126,7 @@ public:
             getThreaded[page].setOpt(curlpp::options::WriteStream(&getStream[page]));
             getThreaded[page].setOpt(options::TcpNoDelay(true));
         }
-        thread AvgApi([this]() { get3DayAvg(); });
+//        thread AvgApi([this]() { get3DayAvg(); });
         thread HyApi([this]() { HyAPI(); });
         thread AuthApi([this]() { getAuth(); });
         thread ClearCache([this]() { clearCache(); });
@@ -132,7 +138,7 @@ public:
         AuthApi.join();
         Sleep.join();
         cout << "AuthAPI exited." << endl;
-        AvgApi.join();
+//        AvgApi.join();
         cout << "AvgAPI exited." << endl;
         HyApi.join();
         cout << "HyAPI exited." << endl;
@@ -149,10 +155,11 @@ private:
     condition_variable exitc;
     atomic<int> threads = 0;
     curlpp::Easy getThreaded[200];
-    unordered_map<string, vector<tuple<int, string, long long, string, string>>> GlobalPrices;
-    unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> Cache;
+    unordered_map<string, vector<tuple<int, string, long long, string, string, int>>> GlobalPrices;
+    unordered_map<string, pair<string, tuple<int, string, long long, string, string, int>>> Cache;
     set<string> UniqueIDs;
     atomic<bool> running, active = false, sleep;
+    int rarityupgradeprice;
 //    nlohmann::json AveragePrice;
     simdjson::ondemand::parser getParser[200];
     unordered_map<string, int> AveragePrice;
@@ -161,7 +168,7 @@ private:
     atomic<long long> updated = 0;
     unordered_map<string, string> Auth;
     ostringstream getStream[200];
-    int port = 80;
+    int port = 8080;
     const int margin = 1000000;
     map<string, int> tiers{
             {"COMMON",    0},
@@ -178,6 +185,8 @@ private:
         simdjson::ondemand::parser BzParser;
         simdjson::padded_string BzPadded = Bazaar.str();
         simdjson::ondemand::document BzDoc = BzParser.iterate(BzPadded);
+        auto products = BzDoc["products"];
+        rarityupgradeprice = products["RECOMBOBULATOR_3000"]["sell_summary"].at(0)["pricePerUnit"].get_double();
     }
 
     //Functions
@@ -237,8 +246,12 @@ private:
     void getAuth() {
         while (running) {
             ifstream WhitelistJson("whitelist.json");
-            auto whitelist = nlohmann::json::parse(WhitelistJson);
-            Auth = whitelist.get<unordered_map<string, string >>();
+            try{
+                auto whitelist = nlohmann::json::parse(WhitelistJson);
+                Auth = whitelist.get<unordered_map<string, string >>();
+            }catch(...){
+                cout<<"No Authentication\n";
+            }
             this_thread::sleep_for(chrono::seconds(15));
         }
     }
@@ -264,8 +277,8 @@ private:
     pair<int, long long> getPage(int page, bool fallback=false) {
         ++threads;
         auto starttime = high_resolution_clock::now();
-        unordered_map<string, vector<tuple<int, string, long long, string, string>>> prices;
-        unordered_map<string, pair<string, tuple<int, string, long long, string, string>>> local_cache;
+        unordered_map<string, vector<tuple<int, string, long long, string, string, int>>> prices;
+        unordered_map<string, pair<string, tuple<int, string, long long, string, string, int>>> local_cache;
         set<string> localUniqueIDs;
         do {
             getThreaded[page].perform();
@@ -312,8 +325,9 @@ private:
                             istringstream str(d);
                             zstr::istream decoded(str);
                             nbtdata.decode(decoded);
+//                            cout<<nbtdata<<'\n';
                             string ID;
-                            int value = 0;
+//                            int value = 0;
                             //                        cout<<nbtdata<<endl;
                             if (nbt::get_list<nbt::TagCompound>
                                         (nbtdata.at<nbt::TagList>("i"))[0]
@@ -364,23 +378,26 @@ private:
                                         string(i["uuid"].get_string().value()),
                                         i["start"].get_int64(),
                                         string(i["item_name"].get_string().value()),
-                                        string(i["tier"].get_string().value()));
+                                        string(i["tier"].get_string().value()),
+                                        modvalue);
                             } else {
-                                prices.insert({ID, {tuple<int, string, long long, string, string>(
+                                prices.insert({ID, {tuple<int, string, long long, string, string, int>(
                                         i["starting_bid"].get_int64(),
                                         string(i["uuid"].get_string().value()),
                                         i["start"].get_int64(),
                                         string(i["item_name"].get_string().value()),
-                                        string(i["tier"].get_string().value()))}});
+                                        string(i["tier"].get_string().value()),
+                                        modvalue)}});
                                 localUniqueIDs.insert(ID);
                             }
                             local_cache.insert({string(i["uuid"].get_string().value()), {
-                                    ID, tuple<int, string, long long, string, string>(
+                                    ID, tuple<int, string, long long, string, string, int>(
                                             int(i["starting_bid"].get_int64()),
                                             string(i["uuid"].get_string().value()),
                                             (long long) (i["start"].get_int64()),
                                             string(i["item_name"].get_string().value()),
-                                            string(i["tier"].get_string().value()))}});
+                                            string(i["tier"].get_string().value()),
+                                            modvalue)}});
                         }
                     }
                 } catch (...) {
@@ -533,5 +550,6 @@ int main() {
     entrypoint.initialize();
     entrypoint.start();
     cURLpp::terminate();
+
     return 0;
 }
