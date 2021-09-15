@@ -38,10 +38,10 @@ using std::chrono::milliseconds;
 
 bool Comparator(const tuple<int, string, long long, string, string, int> &a, const tuple<int, string, long long, string, string, int> &b)
 {
-    if(max(get<0>(a) - get<5>(a), 0) != max(get<0>(b) - get<5>(b), 0))
-        return max(get<0>(a) - get<5>(a), 0) < max(get<0>(b) - get<5>(b), 0);
+    if (get<0>(a) - get<5>(a) != get<0>(b) - get<5>(b))
+        return get<0>(a) - get<5>(a) < get<0>(b) - get<5>(b);
     else
-        return get<2>(a)<get<2>(b);
+        return get<2>(a) < get<2>(b);
 }
 class Server {
 public:
@@ -373,6 +373,8 @@ private:
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes");
                                 modvalue += (ExtraAttributes.base.find("rarity_upgrades")
                                              != ExtraAttributes.base.end()) * rarityupgradeprice;
+//                                if(string(i["category"].get_string().value()) != "accessories")
+                                modvalue = min(modvalue, int(i["starting_bid"].get_int64()));
                             } else {
                                 ID = nbt::get_list<nbt::TagCompound>(nbtdata.at<nbt::TagList>("i"))[0]
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes")
@@ -382,6 +384,8 @@ private:
                                         .at<nbt::TagCompound>("tag").at<nbt::TagCompound>("ExtraAttributes");
                                 modvalue += (ExtraAttributes.base.find("rarity_upgrades")
                                              != ExtraAttributes.base.end()) * rarityupgradeprice;
+                                if (string(i["category"].get_string().value()) != "accessories")
+                                    modvalue = min(modvalue, int(i["starting_bid"].get_int64()));
                             }
                             if (prices.find(ID) != prices.end()) {
                                 prices.find(ID)->second.emplace_back(
