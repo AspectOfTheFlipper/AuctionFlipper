@@ -478,7 +478,7 @@ private:
                 auto downloadtime = high_resolution_clock::now();
                 for (auto &member : UniqueIDs) {
                     auto &a = GlobalPrices.find(member)->second;
-                    sort(a.begin(), a.end(), Comparator);
+                    sort(a.begin(), a.end());
 //                    for (auto &r : a) {
 //                        ++count;
 //                    }
@@ -493,9 +493,9 @@ private:
                                     make_pair("buy_price", get<0>(*a.begin())),
                                     make_pair("tier", (get<4>(*a.begin())))};
                         } else {
-                            int minprice = min(get<0>(*(a.begin() + 1)) - get<5>(*(a.begin() + 1)),
+                            int minprice = min(get<0>(*(a.begin() + 1)),
                                                AveragePrice[member]);
-                            if (get<0>(*a.begin()) - get<5>(*a.begin()) <=
+                            if (get<0>(*a.begin()) <=
                                 min(minprice - margin, minprice / 10 * 9)) {
                                 if (get<2>(*a.begin()) >= lastUpdate) {
                                     sniper[sniper.size()] = {
@@ -518,7 +518,7 @@ private:
                                                       minprice + get<5>(*a.begin()) - 1),
                                             make_pair("tier", (get<4>(*a.begin())))};
                                 }
-                            } else if (get<0>(*a.begin()) - get<5>(*a.begin()) <
+                            } else if (get<0>(*a.begin()) <
                                        minprice / 100 * 99) {
                                 bin_free[bin_free.size()] = {
                                         make_pair("uuid", (get<1>(*a.begin()))),
